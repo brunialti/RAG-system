@@ -113,7 +113,7 @@ your_app_root_directory/
 ├── requiremnts.txt                                  # Required libraries
 └── config.json                                      # Configuration file for UI_manager.py
 </code>
-
+<br>
 Module Details:
   - __init__.py: Initializes the rag_system package.
   - bm25_retriever.py: Contains BM25 retrieval logic.
