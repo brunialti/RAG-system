@@ -74,6 +74,8 @@ Re-ranking:
     the top results, with detailed debugging and min–max normalization.
 
 ---
+
+<code>
 3) MODULE STRUCTURE
 
 your_app_root_directory/
@@ -108,7 +110,7 @@ your_app_root_directory/
 ├── setup_models.py                # Downloads local models from HuggingFace
 ├── requiremnts.txt                # Required libraries
 └── config.json                    # Configuration file for UI_manager.py
-
+</code>
 Module Details:
   - __init__.py: Initializes the rag_system package.
   - bm25_retriever.py: Contains BM25 retrieval logic.
