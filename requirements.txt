@@ -1,0 +1,12 @@
+faiss-cpu
+sentence-transformers
+nltk
+numpy
+PyPDF2
+textract-py3
+python-docx
+antiword
+sentence_transformers
+python-docx
+docx2txt
+rank-bm25
