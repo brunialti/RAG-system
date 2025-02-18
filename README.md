@@ -1,7 +1,7 @@
 
-<b>RAG SYSTEM - README
-Author: Roberto Brunialti
-Copyright: (c) 2025</b>
+<b>RAG SYSTEM - README</b>
+<b>Author: Roberto Brunialti</b>
+<b>Copyright: (c) 2025</b>
 
 WARNING: This code is a Beta release. It may or may not fully meet your needs.
 Use it "as is" at your own risk.
