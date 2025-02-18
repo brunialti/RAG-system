@@ -1,6 +1,6 @@
-RAG SYSTEM - README
+<b>RAG SYSTEM - README
 Author: Roberto Brunialti
-Copyright: (c) 2025
+Copyright: (c) 2025</b>
 
 WARNING: This code is a Beta release. It may or may not fully meet your needs.
 Use it "as is" at your own risk.
@@ -76,7 +76,7 @@ Re-ranking:
 ---
 
 
-b>3) MODULE STRUCTURE</b>
+<b>3) MODULE STRUCTURE</b>
 
 <code>
 your_app_root_directory/
