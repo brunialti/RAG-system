@@ -12,7 +12,7 @@ Other document types can be added by modifying document_manager.py, provided tha
 can extract plain text from the desired format.
 
 ---
-1) GENERAL DESCRIPTION
+<b>1) GENERAL DESCRIPTION</b>
 
 This program implements a Retrieval-Augmented Generation (RAG) system that indexes a document
 collection using multiple retrieval methods: a dense approach (FAISS), a sparse approach (BM25),
@@ -41,7 +41,7 @@ In practice:
   signal fusion strategies).
 
 ---
-2) DESIGN AND TECHNICAL CHOICES
+<b>2) DESIGN AND TECHNICAL CHOICES</b>
 
 Dual/Multi Index:
   - FAISS: Captures semantic similarity via dense embeddings (using SentenceTransformer).
@@ -75,9 +75,10 @@ Re-ranking:
 
 ---
 
-<code>
-3) MODULE STRUCTURE
 
+b>3) MODULE STRUCTURE</b>
+
+<code>
 your_app_root_directory/
 ├── rag_system/
 │   ├── persistent_stores/         # Vector store directory (created automatically)
@@ -111,6 +112,7 @@ your_app_root_directory/
 ├── requiremnts.txt                # Required libraries
 └── config.json                    # Configuration file for UI_manager.py
 </code>
+
 Module Details:
   - __init__.py: Initializes the rag_system package.
   - bm25_retriever.py: Contains BM25 retrieval logic.
@@ -128,7 +130,7 @@ Module Details:
   - setup_models.py: Utility script to download local models for offline use.
 
 ---
-4) INSTALLATION
+<b>4) INSTALLATION</b>
 
 4.1. Drop the rag_system directory "as-is" where you want to use it.
 4.2. Install required libraries:
@@ -140,8 +142,8 @@ Module Details:
 Note: The persistent_stores directory will be created automatically when you create your
 first store.
 
----
-5) HOW TO START
+--
+<b>5) HOW TO START</b>
 
 Once installed, the system is not fully functional until a vector store is created.
 To start:
@@ -152,7 +154,7 @@ To start:
 These operations can also be done via a Python script; see provided samples if available.
 
 ---
-6) REFERENCES
+<b>6) REFERENCES<b>
 
 Introductory papers:
 1. https://medium.com/@alexrodriguesj/retrieval-augmented-generation-rag-with-langchain-and-faiss-a3997f95b551
