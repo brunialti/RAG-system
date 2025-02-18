@@ -114,7 +114,7 @@ your_app_root_directory/
 └── config.json                                      # Configuration file for UI_manager.py
 </code>
 
-
+</b>
 
 Module Details:
   - __init__.py: Initializes the rag_system package.
