@@ -82,36 +82,36 @@ Re-ranking:
 <code>
 your_app_root_directory/
 ├── rag_system/
-│   ├── persistent_stores/         # Vector store directory (created automatically)
-│   │   └── TEST/                      # Example Vector Store
-│   │       ├── index.faiss            # FAISS index
-│   │       ├── index_bm25.pkl         # BM25 index
-│   │       ├── index.faiss            # FAISS index
-│   │       ├── tfidf.pkl              # TF-IDF index
-│   │       └── metadata.pkl           # Metadata index
-│   ├── models/                    # Local models (installed by setup_models.py)
+│   ├── persistent_stores/                           # Vector store directory (created automatically)
+│   │   └── TEST/                                    # Example Vector Store
+│   │       ├── index.faiss                          # FAISS index
+│   │       ├── index_bm25.pkl                       # BM25 index
+│   │       ├── index.faiss                          # FAISS index
+│   │       ├── tfidf.pkl                            # TF-IDF index
+│   │       └── metadata.pkl                         # Metadata index
+│   ├── models/                                      # Local models (installed by setup_models.py)
 │   │   ├── all-distilroberta-v1
 │   │   ├── all-MiniLM-L6-v2
 │   │   ├── all-mpnet-base-v2
 │   │   ├── cross-encoder
 │   │   └── cross-encoder_ms-marco-MiniLM-L-6-v2
-│   ├── __init__.py                # Initializes the rag_system package
-│   ├── bm25_retriever.py          # BM25 retrieval logic
-│   ├── chunker.py                 # Dynamic text chunking functions
-│   ├── README.md                  # This file
-│   ├── config.py                  # Global configuration (config.json)
-│   ├── document_manager.py        # Document loading and duplicate detection
-│   ├── embedding_manager.py       # Splits documents and computes dense embeddings 
-│   │                              # (delegates chunking to chunker.py)
-│   ├── search_engine.py           # Search strategies: faiss, bm25, ibrido, multi, rrf; includes 
-│   │                              # cross-encoder re-ranking and optional knee detection
-│   ├── utils.py                   # Helper functions (e.g., MD5 computation)
-│   └── vector_storage.py          # Manages indices (FAISS, BM25, persistent TF-IDF) and metadata
-├── UI_manager.py                  # Graphical UI for managing the system
-├── UI_manager.json                # UI configuration file
-├── setup_models.py                # Downloads local models from HuggingFace
-├── requiremnts.txt                # Required libraries
-└── config.json                    # Configuration file for UI_manager.py
+│   ├── __init__.py                                  # Initializes the rag_system package
+│   ├── bm25_retriever.py                            # BM25 retrieval logic
+│   ├── chunker.py                                   # Dynamic text chunking functions
+│   ├── README.md                                    # This file
+│   ├── config.py                                    # Global configuration (config.json)
+│   ├── document_manager.py                          # Document loading and duplicate detection
+│   ├── embedding_manager.py                         # Splits documents and computes dense embeddings 
+│   │                                                  (delegates chunking to chunker.py)
+│   ├── search_engine.py                             # Search strategies: faiss, bm25, ibrido, multi, rrf; includes 
+│   │                                                  cross-encoder re-ranking and optional knee detection
+│   ├── utils.py                                     # Helper functions (e.g., MD5 computation)
+│   └── vector_storage.py                            # Manages indices (FAISS, BM25, persistent TF-IDF) and metadata
+├── UI_manager.py                                    # Graphical UI for managing the system
+├── UI_manager.json                                  # UI configuration file
+├── setup_models.py                                  # Downloads local models from HuggingFace
+├── requiremnts.txt                                  # Required libraries
+└── config.json                                      # Configuration file for UI_manager.py
 </code>
 
 Module Details:
