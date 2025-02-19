@@ -1,7 +1,6 @@
-
-<b>RAG SYSTEM - README<br>
-Author: Roberto Brunialti<br>
-Copyright: (c) 2025</b>
+RAG SYSTEM - README
+Author: Roberto Brunialti
+Copyright: (c) 2025
 
 WARNING: This code is a Beta release. It may or may not fully meet your needs.
 Use it "as is" at your own risk.
@@ -9,11 +8,13 @@ Consider rag_system as a workbench to better understand RAG systems and to pract
 No extensive stress or scalability tests have been performed; nevertheless, it should work 
 effectively with stores up to 500,000 chunks at least. The document ingestion module manages 
 documents of the following types: .txt, .doc (with some limitations), .docx, .pdf.
+It can also add  excel files but with unsatisfactory search results and with some dimensions and
+format constraints.
 Other document types can be added by modifying document_manager.py, provided that your tools 
 can extract plain text from the desired format.
 
 ---
-<b>1) GENERAL DESCRIPTION</b>
+1) GENERAL DESCRIPTION
 
 This program implements a Retrieval-Augmented Generation (RAG) system that indexes a document
 collection using multiple retrieval methods: a dense approach (FAISS), a sparse approach (BM25),
@@ -40,9 +41,12 @@ In practice:
 - An optional knee detection algorithm is available to automatically set a cutoff threshold 
   based on the distribution of scores when multiple signals are fused (applicable only to multi-
   signal fusion strategies).
-
+- excel files are allowed by the system, provided:
+    • the table has an header
+    • the file is not too big (well, I know it is somehow vague, but I did not tested the system limits...)
 ---
-<b>2) DESIGN AND TECHNICAL CHOICES</b>
+
+2) DESIGN AND TECHNICAL CHOICES
 
 Dual/Multi Index:
   - FAISS: Captures semantic similarity via dense embeddings (using SentenceTransformer).
@@ -75,46 +79,40 @@ Re-ranking:
     the top results, with detailed debugging and min–max normalization.
 
 ---
+3) MODULE STRUCTURE
 
-
-<b>3) MODULE STRUCTURE</b>
-
-<code>
 your_app_root_directory/
 ├── rag_system/
-│   ├── persistent_stores/                           # Vector store directory (created automatically)
-│   │   └── TEST/                                    # Example Vector Store
-│   │       ├── index.faiss                          # FAISS index
-│   │       ├── index_bm25.pkl                       # BM25 index
-│   │       ├── index.faiss                          # FAISS index
-│   │       ├── tfidf.pkl                            # TF-IDF index
-│   │       └── metadata.pkl                         # Metadata index
-│   ├── models/                                      # Local models (installed by setup_models.py)
+│   ├── persistent_stores/         # Vector store directory (created automatically)
+│   │   └── TEST/                      # Example Vector Store
+│   │       ├── index.faiss            # FAISS index
+│   │       ├── index_bm25.pkl         # BM25 index
+│   │       ├── index.faiss            # FAISS index
+│   │       ├── tfidf.pkl              # TF-IDF index
+│   │       └── metadata.pkl           # Metadata index
+│   ├── models/                    # Local models (installed by setup_models.py)
 │   │   ├── all-distilroberta-v1
 │   │   ├── all-MiniLM-L6-v2
 │   │   ├── all-mpnet-base-v2
 │   │   ├── cross-encoder
 │   │   └── cross-encoder_ms-marco-MiniLM-L-6-v2
-│   ├── __init__.py                                  # Initializes the rag_system package
-│   ├── bm25_retriever.py                            # BM25 retrieval logic
-│   ├── chunker.py                                   # Dynamic text chunking functions
-│   ├── README.md                                    # This file
-│   ├── config.py                                    # Global configuration (config.json)
-│   ├── document_manager.py                          # Document loading and duplicate detection
-│   ├── embedding_manager.py                         # Splits documents and computes dense embeddings 
-│   │                                                  (delegates chunking to chunker.py)
-│   ├── search_engine.py                             # Search strategies: faiss, bm25, ibrido, multi, rrf; includes 
-│   │                                                  cross-encoder re-ranking and optional knee detection
-│   ├── utils.py                                     # Helper functions (e.g., MD5 computation)
-│   └── vector_storage.py                            # Manages indices (FAISS, BM25, persistent TF-IDF) and metadata
-├── UI_manager.py                                    # Graphical UI for managing the system
-├── UI_manager.json                                  # UI configuration file
-├── setup_models.py                                  # Downloads local models from HuggingFace
-├── requiremnts.txt                                  # Required libraries
-└── config.json                                      # Configuration file for UI_manager.py
-</code>
-
-</b>
+│   ├── __init__.py                # Initializes the rag_system package
+│   ├── bm25_retriever.py          # BM25 retrieval logic
+│   ├── chunker.py                 # Dynamic text chunking functions
+│   ├── README.md                  # This file
+│   ├── config.py                  # Global configuration (config.json)
+│   ├── document_manager.py        # Document loading and duplicate detection
+│   ├── embedding_manager.py       # Splits documents and computes dense embeddings 
+│   │                              # (delegates chunking to chunker.py)
+│   ├── search_engine.py           # Search strategies: faiss, bm25, ibrido, multi, rrf; includes 
+│   │                              # cross-encoder re-ranking and optional knee detection
+│   ├── utils.py                   # Helper functions (e.g., MD5 computation)
+│   └── vector_storage.py          # Manages indices (FAISS, BM25, persistent TF-IDF) and metadata
+├── UI_manager.py                  # Graphical UI for managing the system
+├── UI_manager.json                # UI configuration file
+├── setup_models.py                # Downloads local models from HuggingFace
+├── requiremnts.txt                # Required libraries
+└── config.json                    # Configuration file for UI_manager.py
 
 Module Details:
   - __init__.py: Initializes the rag_system package.
@@ -133,7 +131,7 @@ Module Details:
   - setup_models.py: Utility script to download local models for offline use.
 
 ---
-<b>4) INSTALLATION</b>
+4) INSTALLATION
 
 4.1. Drop the rag_system directory "as-is" where you want to use it.
 4.2. Install required libraries:
@@ -145,8 +143,8 @@ Module Details:
 Note: The persistent_stores directory will be created automatically when you create your
 first store.
 
---
-<b>5) HOW TO START</b>
+---
+5) HOW TO START
 
 Once installed, the system is not fully functional until a vector store is created.
 To start:
@@ -157,7 +155,7 @@ To start:
 These operations can also be done via a Python script; see provided samples if available.
 
 ---
-<b>6) REFERENCES<b>
+6) REFERENCES
 
 Introductory papers:
 1. https://medium.com/@alexrodriguesj/retrieval-augmented-generation-rag-with-langchain-and-faiss-a3997f95b551
