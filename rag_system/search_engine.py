@@ -1,18 +1,71 @@
+"""
+search_engine.py
+----------------
+Questo modulo implementa le strategie di ricerca per il sistema RAG. Le strategie supportate sono:
+  - faiss: ricerca densa tramite FAISS.
+  - bm25: ricerca classica BM25, operante a livello documentale.
+  - ibrido: fusione lineare dei segnali densi (FAISS) e sparsi (BM25).
+  - multi: fusione di FAISS, BM25 e TF-IDF tramite normalizzazione e somma pesata.
+  - rrf: Reciprocal Rank Fusion (RRF) che combina i ranking provenienti da FAISS, BM25 e TF-IDF.
+
+I punteggi delle strategie che usano un singolo indice (faiss, bm25) non vengono normalizzati oltre
+la conversione da distanza a similarità (FAISS) o il punteggio nativo (BM25).
+Nelle strategie di fusione (ibrido, multi, rrf) avviene una normalizzazione intermedia dei punteggi
+prima di combinarli.
+
+Inoltre, se un cross-encoder è presente, si può opzionalmente normalizzare (min–max) i punteggi del re-ranking
+oppure lasciarli "raw".
+Se è attivata la knee detection, dopo l'ordinamento decrescente dei risultati, si applica un cutoff automatico
+basato su un'analisi del punto di maggior calo (knee).
+
+Riferimenti:
+  - Fox, E.A., & Shaw, J.A. (1994). Combination of multiple searches. TREC.
+  - Cormack, G. V., Clarke, C. L. A., & Buettcher, S. (2009). Reciprocal rank fusion outperforms Condorcet and
+    individual rank learning methods. SIGIR.
+  - FAISS: https://faiss.ai/
+  - rank_bm25 per BM25.
+  - scikit-learn TfidfVectorizer per TF-IDF.
+"""
+
 from typing import List, Dict, Any
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 
+def detect_knee(scores: List[float]) -> float:
+    """
+    Implementa una semplice knee detection:
+      - Calcola le differenze tra punteggi consecutivi (assumendo che siano ordinati in ordine decrescente).
+      - Restituisce il punteggio immediatamente successivo al punto di maggior calo (max drop).
+    Se la lista è troppo corta, restituisce il primo punteggio o 0 se vuota.
+    """
+    if len(scores) < 2:
+        return scores[0] if scores else 0.0
+    # Calcola la differenza tra ogni coppia consecutiva
+    diffs = [scores[i] - scores[i + 1] for i in range(len(scores) - 1)]
+    # Trova l'indice del drop massimo
+    max_drop_index = diffs.index(max(diffs))
+    # Restituisce il punteggio successivo al drop
+    return scores[max_drop_index + 1]
+
+
 class SearchEngine:
-    def __init__(self, vector_storage, embedding_manager, cross_encoder=None,
-                 weight_dense=0.4, weight_bm25=0.3, weight_tfidf=0.3):
+    def __init__(
+            self,
+            vector_storage,
+            embedding_manager,
+            cross_encoder=None,
+            weight_dense=0.4,
+            weight_bm25=0.3,
+            weight_tfidf=0.3
+    ):
         """
-        :param vector_storage: VectorStorage (supports FAISS, BM25, and persistent TF-IDF)
-        :param embedding_manager: EmbeddingManager used to generate dense embeddings
-        :param cross_encoder: Optional re-ranking model (e.g., CrossEncoder)
-        :param weight_dense: Weight for the dense (FAISS) signal
-        :param weight_bm25: Weight for the BM25 signal
-        :param weight_tfidf: Weight for the TF-IDF signal
+        :param vector_storage: VectorStorage (gestisce FAISS, BM25 e TF-IDF)
+        :param embedding_manager: EmbeddingManager per generare le embedding
+        :param cross_encoder: eventuale modello di re-ranking (CrossEncoder)
+        :param weight_dense: peso del segnale denso (usato in ibrido e multi)
+        :param weight_bm25: peso del segnale BM25 (usato in ibrido e multi)
+        :param weight_tfidf: peso del segnale TF-IDF (usato in multi)
         """
         self.vector_storage = vector_storage
         self.embedding_manager = embedding_manager
@@ -21,53 +74,83 @@ class SearchEngine:
         self.weight_bm25 = weight_bm25
         self.weight_tfidf = weight_tfidf
 
-    def search_with_strategy(self, query: str, strategy="faiss", top_k=10, retrieval_mode="chunk", threshold=0.0):
+    def search_with_strategy(
+            self,
+            query: str,
+            strategy="faiss",
+            top_k=10,
+            retrieval_mode="chunk",
+            threshold=0.0,
+            use_knee_detection: bool = False
+    ) -> List[Dict[str, Any]]:
         """
-        Executes the search using the specified strategy and then filters out results whose
-        score (or normalized ce_score if available) is below the threshold.
-        Supported strategies:
-          - "faiss": Dense search using FAISS
-          - "bm25": Sparse search using BM25
-          - "ibrido"/"hybrid": Combination of FAISS and BM25 signals
-          - "multi": Multi-representation search combining FAISS, BM25, and persistent TF-IDF
+        Seleziona la strategia di retrieval in base al parametro 'strategy'.
+        Strategie supportate: faiss, bm25, ibrido, multi, rrf.
 
-        :param query: Query string.
-        :param strategy: Retrieval strategy.
-        :param top_k: Number of top results to return.
-        :param retrieval_mode: "chunk" or "document".
-        :param threshold: Minimum score required after cross-encoder normalization.
-        :return: Filtered list of results.
+        :param query: stringa di query.
+        :param strategy: strategia di retrieval (faiss, bm25, ibrido, multi, rrf).
+        :param top_k: numero di risultati da restituire.
+        :param retrieval_mode: "chunk" o "document" (BM25 è document-level).
+        :param threshold: soglia minima per filtrare i risultati in base al punteggio finale.
+        :param use_knee_detection: se True, applica un cutoff automatico tramite knee detection dopo l'ordinamento.
+        :return: lista dei risultati filtrati.
         """
-        strategy = strategy.lower()
+        strategy = strategy.lower().strip()
+        retrieval_mode = retrieval_mode.lower().strip()
         print(
             f"[DEBUG] search_with_strategy called with strategy={strategy}, top_k={top_k}, retrieval_mode={retrieval_mode}, threshold={threshold}")
+
         if strategy == "faiss":
             results = self.search_dense(query, top_k, retrieval_mode)
         elif strategy == "bm25":
-            results = self.search_bm25(query, top_k, retrieval_mode)
+            results = self.search_bm25(query, top_k)
         elif strategy in ("ibrido", "hybrid"):
             results = self.search_hybrid(query, top_k, retrieval_mode)
         elif strategy == "multi":
-            results = self.search_multi_representation(query, top_k, retrieval_mode)
+            results = self.search_multi_representation(query, top_k, "document")
+        elif strategy == "rrf":
+            results = self.search_rrf(query, top_k, "document")
         else:
             raise ValueError(f"Unknown retrieval strategy: {strategy}")
+
         print(f"[DEBUG] search_with_strategy: obtained {len(results)} results before threshold filtering")
-        filtered = [r for r in results if r.get("ce_score", r.get("score", 0)) >= threshold]
-        print(f"[DEBUG] search_with_strategy: {len(filtered)} results remain after applying threshold {threshold}")
+
+        # Assicuriamoci che i risultati siano ordinati in ordine decrescente
+        # basandoci su "ce_score" se presente, altrimenti su "score".
+        results.sort(key=lambda r: r.get("ce_score", r.get("score", 0.0)), reverse=True)
+
+        if use_knee_detection and results:
+            # Esegui la knee detection sui punteggi
+            scores = [r.get("ce_score", r.get("score", 0.0)) for r in results]
+            cutoff = detect_knee(scores)
+            print(f"[DEBUG] Knee detection cutoff: {cutoff}")
+            results = [r for r in results if r.get("ce_score", r.get("score", 0.0)) > cutoff]
+
+        # Filtraggio finale in base al threshold
+        filtered = [r for r in results if r.get("ce_score", r.get("score", 0.0)) >= threshold]
         return filtered
 
     # ------------------- FAISS -------------------
-    def search_dense(self, query: str, top_k=10, retrieval_mode="chunk"):
+    def search_dense(self, query: str, top_k=10, retrieval_mode="chunk") -> List[Dict[str, Any]]:
+        """
+        Ricerca densa con FAISS. Se retrieval_mode="document", si aggregano i chunk e si prende
+        il punteggio massimo per ogni documento. Non applichiamo normalizzazione min–max
+        se stiamo usando un singolo indice.
+        """
         if "faiss" not in self.vector_storage.indices_present:
             return []
         q_vec = self.embedding_manager.embed_query(query)
+
         if retrieval_mode == "document":
             effective_top_k = top_k * 3
             candidate_chunks = self.vector_storage.search(q_vec, top_k=effective_top_k)
+            # Conversione da distanza a similarità
             for r in candidate_chunks:
                 dist = r["score"]
                 similarity = 1.0 / (dist + 1e-6)
                 r["score"] = similarity
+
+            # Raggruppo i chunk per doc_id
             doc_results = {}
             for r in candidate_chunks:
                 doc_id = r["doc_id"]
@@ -76,48 +159,62 @@ class SearchEngine:
                 else:
                     doc_results[doc_id]["score"] = max(doc_results[doc_id]["score"], r["score"])
                     doc_results[doc_id]["chunks"].append(r["chunk"])
+
             aggregated_results = []
             for doc_id, info in doc_results.items():
                 full_text = " ".join(info["chunks"])
                 aggregated_results.append({"doc_id": doc_id, "score": info["score"], "text": full_text})
+
+            # Re-ranking con cross-encoder, senza normalizzare i punteggi
             if self.cross_encoder:
-                aggregated_results = self.rerank_with_cross_encoder(query, aggregated_results)
-            aggregated_results.sort(key=lambda x: x["score"], reverse=True)
+                aggregated_results = self.rerank_with_cross_encoder(query, aggregated_results, normalize_ce=False)
+
+            # Non serve un sort aggiuntivo qui perché search_with_strategy li ordinerà di nuovo
             return aggregated_results[:top_k]
+
         else:
+            # retrieval_mode="chunk"
             results = self.vector_storage.search(q_vec, top_k=top_k)
             for r in results:
                 dist = r["score"]
                 similarity = 1.0 / (dist + 1e-6)
                 r["score"] = similarity
+
             if self.cross_encoder:
-                results = self.rerank_with_cross_encoder(query, results)
+                results = self.rerank_with_cross_encoder(query, results, normalize_ce=False)
             return results
 
     # ------------------- BM25 -------------------
-    def search_bm25(self, query: str, top_k=10, retrieval_mode="chunk"):
+    def search_bm25(self, query: str, top_k=10) -> List[Dict[str, Any]]:
+        """
+        Ricerca classica BM25 a livello documentale. Non applichiamo ulteriori normalizzazioni.
+        """
         if "bm25" not in self.vector_storage.indices_present:
             return []
         results = self.vector_storage.search_bm25(query, top_k=top_k)
-        # In BM25, we now aggregate actual document text regardless of mode, as BM25 is inherently document-level.
+
+        # Aggrego il testo del documento
         aggregated = []
         for r in results:
             doc_id = r["doc_id"]
             doc_info = self.vector_storage.documents.get(doc_id, {})
             full_text = " ".join(ch["chunk"] for ch in doc_info.get("chunks", []))
-            aggregated.append({
-                "doc_id": doc_id,
-                "score": r["score"],
-                "text": full_text,
-                "source": r.get("source", "bm25")
-            })
-        results = aggregated
-        if self.cross_encoder:
-            results = self.rerank_with_cross_encoder(query, results)
-        return results
+            aggregated.append({"doc_id": doc_id, "score": r["score"], "text": full_text})
 
-    # ------------------- IBRIDO (Hybrid) -------------------
-    def search_hybrid(self, query: str, top_k=10, retrieval_mode="chunk"):
+        # Re-ranking con cross-encoder, punteggi raw
+        if self.cross_encoder:
+            aggregated = self.rerank_with_cross_encoder(query, aggregated, normalize_ce=False)
+
+        return aggregated
+
+    # ------------------- HYBRID (faiss + bm25) -------------------
+    def search_hybrid(self, query: str, top_k=10, retrieval_mode="chunk") -> List[Dict[str, Any]]:
+        """
+        Fusione lineare dei punteggi di FAISS e BM25. FAISS è convertito a similarità (no normalizzazione).
+        BM25 è punteggio nativo. Poi facciamo una somma pesata. Infine re-ranking con cross-encoder normalizzato.
+        """
+        print(f"[DEBUG] search_hybrid: retrieval_mode={retrieval_mode}")
+
         dense_res = []
         if "faiss" in self.vector_storage.indices_present:
             q_vec = self.embedding_manager.embed_query(query)
@@ -127,11 +224,13 @@ class SearchEngine:
                 dist = r["score"]
                 sim = 1.0 / (dist + 1e-6)
                 r["score"] = sim
+
         bm25_res = []
         if "bm25" in self.vector_storage.indices_present:
             bm25_res = self.vector_storage.search_bm25(query, top_k=top_k)
+
         if retrieval_mode == "document":
-            # Document mode: aggregate all chunks per doc.
+            # Raggruppa i chunk FAISS per doc
             dense_group = {}
             for r in dense_res:
                 doc_id = r["doc_id"]
@@ -140,12 +239,15 @@ class SearchEngine:
                 else:
                     dense_group[doc_id]["score"] = max(dense_group[doc_id]["score"], r["score"])
                     dense_group[doc_id]["chunks"].append(r["chunk"])
+
+            # Combino punteggi FAISS e BM25
             hybrid_scores = {}
             for doc_id, info in dense_group.items():
                 hybrid_scores[doc_id] = self.weight_dense * info["score"]
             for r in bm25_res:
                 doc_id = r["doc_id"]
                 hybrid_scores[doc_id] = hybrid_scores.get(doc_id, 0) + self.weight_bm25 * r["score"]
+
             aggregated_results = []
             for doc_id, sc in hybrid_scores.items():
                 if doc_id in dense_group:
@@ -159,29 +261,36 @@ class SearchEngine:
                     "text": text,
                     "source": "hybrid"
                 })
+
             aggregated_results.sort(key=lambda x: x["score"], reverse=True)
             aggregated_results = aggregated_results[:top_k]
+
+            # Cross-encoder con normalizzazione
             if self.cross_encoder:
-                aggregated_results = self.rerank_with_cross_encoder(query, aggregated_results)
+                aggregated_results = self.rerank_with_cross_encoder(query, aggregated_results, normalize_ce=True)
             return aggregated_results
+
         else:
-            # Chunk mode: return only the best dense chunk per document.
+            # retrieval_mode="chunk": prendo il miglior chunk per doc dal ranking FAISS
             best_dense_chunk = {}
             for r in dense_res:
                 doc_id = r["doc_id"]
                 if doc_id not in best_dense_chunk or r["score"] > best_dense_chunk[doc_id][1]:
                     best_dense_chunk[doc_id] = (r["chunk"], r["score"])
-            # Combine BM25 scores only for docs that have a dense chunk.
+
+            # Combino i punteggi
             hybrid_scores = {}
             for doc_id, (chunk_text, chunk_score) in best_dense_chunk.items():
                 hybrid_scores[doc_id] = self.weight_dense * chunk_score
+
             for r in bm25_res:
                 doc_id = r["doc_id"]
                 if doc_id in best_dense_chunk:
                     hybrid_scores[doc_id] = hybrid_scores.get(doc_id, 0) + self.weight_bm25 * r["score"]
+
             final_results = []
             for doc_id, sc in hybrid_scores.items():
-                text = best_dense_chunk[doc_id][0]  # Only the best chunk
+                text = best_dense_chunk[doc_id][0] if doc_id in best_dense_chunk else ""
                 final_results.append({
                     "doc_id": doc_id,
                     "score": sc,
@@ -190,26 +299,29 @@ class SearchEngine:
                 })
             final_results.sort(key=lambda x: x["score"], reverse=True)
             final_results = final_results[:top_k]
+
+            # Cross-encoder con normalizzazione
             if self.cross_encoder:
-                final_results = self.rerank_with_cross_encoder(query, final_results)
+                final_results = self.rerank_with_cross_encoder(query, final_results, normalize_ce=True)
             return final_results
 
-    # ------------------- MULTI-REPRESENTATION INDEXING -------------------
-    def search_multi_representation(self, query: str, top_k=10, retrieval_mode="document"):
+    # ------------------- MULTI (faiss + bm25 + TF-IDF) -------------------
+    def search_multi_representation(self, query: str, top_k=10, retrieval_mode="document") -> List[Dict[str, Any]]:
         """
-        Combines three signals:
-          - Dense signal from FAISS
-          - BM25 signal
-          - Persistent TF-IDF signal
-        The scores from each signal are normalized and fused using a weighted sum.
-        Operates at the document level.
+        Combina i segnali di FAISS, BM25 e TF-IDF tramite normalizzazione e somma pesata.
+        Opera a livello document.
         """
         dense_candidates = self.search_dense(query, top_k=top_k * 3, retrieval_mode="document")
         dense_dict = {d["doc_id"]: d["score"] for d in dense_candidates}
-        bm25_candidates = self.search_bm25(query, top_k=top_k * 3, retrieval_mode="document")
+        bm25_candidates = self.search_bm25(query, top_k=top_k * 3)
         bm25_dict = {d["doc_id"]: d["score"] for d in bm25_candidates}
-        tfidf_vectorizer, tfidf_matrix, tfidf_doc_ids = self.vector_storage.get_tfidf_index()
-        if tfidf_vectorizer is not None:
+
+        try:
+            tfidf_vectorizer, tfidf_matrix, tfidf_doc_ids = self.vector_storage.get_tfidf_index()
+        except Exception as e:
+            print(f"[DEBUG] Errore in get_tfidf_index: {e}")
+            tfidf_vectorizer, tfidf_matrix, tfidf_doc_ids = None, None, []
+        if tfidf_vectorizer is not None and tfidf_matrix is not None:
             query_vec = tfidf_vectorizer.transform([query])
             tfidf_scores = cosine_similarity(query_vec, tfidf_matrix)[0]
             tfidf_dict = {tfidf_doc_ids[i]: float(tfidf_scores[i]) for i in range(len(tfidf_doc_ids))}
@@ -219,91 +331,145 @@ class SearchEngine:
         def normalize(score_dict):
             if not score_dict:
                 return {}
-            max_score = max(score_dict.values())
-            if max_score > 0:
-                return {k: v / max_score for k, v in score_dict.items()}
-            else:
-                return score_dict
+            mx = max(score_dict.values())
+            if mx > 0:
+                return {k: v / mx for k, v in score_dict.items()}
+            return score_dict
 
         dense_norm = normalize(dense_dict)
         bm25_norm = normalize(bm25_dict)
         tfidf_norm = normalize(tfidf_dict)
         all_doc_ids = set(dense_norm.keys()) | set(bm25_norm.keys()) | set(tfidf_norm.keys())
+
         combined_results = []
         for doc_id in all_doc_ids:
-            score_dense = dense_norm.get(doc_id, 0)
-            score_bm25 = bm25_norm.get(doc_id, 0)
-            score_tfidf = tfidf_norm.get(doc_id, 0)
-            final_score = (self.weight_dense * score_dense +
-                           self.weight_bm25 * score_bm25 +
-                           self.weight_tfidf * score_tfidf)
+            sd = dense_norm.get(doc_id, 0)
+            sb = bm25_norm.get(doc_id, 0)
+            st = tfidf_norm.get(doc_id, 0)
+            fused = self.weight_dense * sd + self.weight_bm25 * sb + self.weight_tfidf * st
             doc_info = self.vector_storage.documents.get(doc_id, {})
             full_text = " ".join(ch["chunk"] for ch in doc_info.get("chunks", []))
-            combined_results.append({
-                "doc_id": doc_id,
-                "score": final_score,
-                "text": full_text
-            })
+            combined_results.append({"doc_id": doc_id, "score": fused, "text": full_text})
+
         combined_results.sort(key=lambda x: x["score"], reverse=True)
+        combined_results = combined_results[:top_k]
+
+        # Re-ranking con cross-encoder normalizzato
         if self.cross_encoder:
-            combined_results = self.rerank_with_cross_encoder(query, combined_results)
-        return combined_results[:top_k]
+            combined_results = self.rerank_with_cross_encoder(query, combined_results, normalize_ce=True)
+        return combined_results
+
+    # ------------------- RRF (Reciprocal Rank Fusion) -------------------
+    def search_rrf(self, query: str, top_k=10, retrieval_mode="document") -> List[Dict[str, Any]]:
+        """
+        Esegue la fusione RRF (Reciprocal Rank Fusion) dei ranking provenienti da FAISS, BM25 e TF-IDF.
+        RRF lavora sui ranking (posizioni), non su punteggi assoluti.
+        """
+        faiss_ranking = self.search_dense(query, top_k=top_k * 3, retrieval_mode="document")
+        bm25_ranking = self.search_bm25(query, top_k=top_k * 3)
+
+        try:
+            tfidf_vectorizer, tfidf_matrix, tfidf_doc_ids = self.vector_storage.get_tfidf_index()
+        except Exception as e:
+            print(f"[DEBUG] Errore in get_tfidf_index: {e}")
+            tfidf_vectorizer, tfidf_matrix, tfidf_doc_ids = None, None, []
+        if tfidf_vectorizer is not None and tfidf_matrix is not None:
+            query_vec = tfidf_vectorizer.transform([query])
+            tfidf_scores = cosine_similarity(query_vec, tfidf_matrix)[0]
+            tfidf_ranking = sorted(
+                [{"doc_id": tfidf_doc_ids[i], "score": float(tfidf_scores[i])} for i in range(len(tfidf_doc_ids))],
+                key=lambda x: x["score"],
+                reverse=True
+            )
+        else:
+            tfidf_ranking = []
+
+        rrf_scores = self.reciprocal_rank_fusion(faiss_ranking, bm25_ranking, tfidf_ranking, k=60)
+        combined = []
+        for doc_id, score in rrf_scores.items():
+            doc_info = self.vector_storage.documents.get(doc_id, {})
+            full_text = " ".join(ch["chunk"] for ch in doc_info.get("chunks", []))
+            combined.append({"doc_id": doc_id, "score": score, "text": full_text})
+
+        combined.sort(key=lambda x: x["score"], reverse=True)
+        combined = combined[:top_k]
+
+        # Re-ranking con cross-encoder normalizzato
+        if self.cross_encoder:
+            combined = self.rerank_with_cross_encoder(query, combined, normalize_ce=True)
+        return combined
+
+    def reciprocal_rank_fusion(self, *rankings, k=60) -> Dict[str, float]:
+        """
+        Applica il Reciprocal Rank Fusion (RRF) su più ranking.
+        Per ogni ranking, un documento in posizione 'rank' ottiene un punteggio di 1/(k + rank).
+        I punteggi finali sono la somma dei contributi di ciascun ranking.
+
+        :param rankings: liste di dict con chiave "doc_id", ordinate per "score" decrescente.
+        :param k: parametro RRF (tipicamente intorno a 60).
+        :return: dizionario {doc_id: punteggio RRF}
+        """
+        rrf_scores = {}
+        for ranking in rankings:
+            sorted_docs = sorted(ranking, key=lambda x: x["score"], reverse=True)
+            for rank, doc in enumerate(sorted_docs):
+                doc_id = doc["doc_id"]
+                rrf_scores[doc_id] = rrf_scores.get(doc_id, 0) + 1.0 / (k + rank)
+        return rrf_scores
 
     # ------------------- CROSS-ENCODER RERANK -------------------
-    def rerank_with_cross_encoder(self, query: str, results: List[Dict[str, Any]]):
+    def rerank_with_cross_encoder(
+            self,
+            query: str,
+            results: List[Dict[str, Any]],
+            normalize_ce: bool = True
+    ) -> List[Dict[str, Any]]:
+        """
+        Applica il re-ranking con un modello cross-encoder.
+        Se normalize_ce=True, i punteggi ottenuti vengono normalizzati min–max.
+        Se normalize_ce=False, manteniamo i punteggi "raw".
+
+        :param query: query string.
+        :param results: lista dei risultati (dizionari) da re-rankare, con campi "score" e/o "text".
+        :param normalize_ce: se True, normalizza i punteggi cross-encoder in [0, 1].
+        :return: lista dei risultati ordinati per "ce_score" decrescente.
+        """
         if not results:
             return results
-        # Prepare passages for each result. Use 'text' if available; otherwise, use 'chunk'.
-        passages = []
-        for r in results:
-            text = r.get("text", r.get("chunk", ""))
-            # If the passage is a placeholder, try to get the real aggregated text.
-            if text.strip().lower() == "document-level":
-                doc_id = r.get("doc_id")
-                doc_info = self.vector_storage.documents.get(doc_id, {})
-                aggregated_text = " ".join(ch["chunk"] for ch in doc_info.get("chunks", []))
-                text = aggregated_text
-            passages.append(text)
+
+        passages = [r.get("text", r.get("chunk", "")) for r in results]
         pairs = [(query, p) for p in passages]
-        print("[DEBUG] Cross-encoder input pairs:")
-        for i, (q, p) in enumerate(pairs):
-            print(f" Pair {i}: Query: {q[:100]}... Passage: {p[:100]}...")
+
         ce_scores = self.cross_encoder.predict(pairs)
         print(f"[DEBUG] Raw cross-encoder scores: {ce_scores}")
-        if ce_scores.size > 0:
-            min_score = float(ce_scores.min())
-            max_score = float(ce_scores.max())
-            mean_score = float(ce_scores.mean())
-            std_score = float(ce_scores.std())
-            print(f"[DEBUG] Cross-encoder stats: min={min_score}, max={max_score}, mean={mean_score}, std={std_score}")
-        else:
-            print("[DEBUG] Cross-encoder returned no scores.")
-        if len(set(ce_scores.tolist())) == 1:
-            print("[WARN] Cross-encoder returned a constant score for all inputs. Check model and inputs!")
-        if ce_scores.size > 0:
-            if max_score - min_score > 1e-6:
-                normalized_scores = [(score - min_score) / (max_score - min_score) for score in ce_scores]
+        ce_scores = np.array(ce_scores)
+
+        if normalize_ce:
+            # Normalizzazione min–max
+            if ce_scores.size > 0:
+                min_score = float(ce_scores.min())
+                max_score = float(ce_scores.max())
             else:
-                normalized_scores = [0.5] * len(ce_scores)
+                min_score = 0.0
+                max_score = 0.0
+
+            if max_score - min_score > 1e-6:
+                normalized = [(s - min_score) / (max_score - min_score) for s in ce_scores]
+            else:
+                normalized = [0.5] * len(ce_scores)
+
+            for r, raw, norm in zip(results, ce_scores, normalized):
+                r["ce_score"] = norm
+                print(f"[DEBUG] Doc_id {r.get('doc_id')} - raw CE score: {raw}, normalized: {norm}")
         else:
-            normalized_scores = []
-        for r, raw, norm in zip(results, ce_scores, normalized_scores):
-            r["ce_score"] = norm
-            print(f"[DEBUG] Doc_id {r.get('doc_id')}: raw score: {raw}, normalized: {norm}")
+            # Usiamo i punteggi "raw"
+            for r, raw in zip(results, ce_scores):
+                r["ce_score"] = float(raw)
+                print(f"[DEBUG] Doc_id {r.get('doc_id')} - raw CE score: {raw}, no normalization")
+
+        # Ordiniamo i risultati in base al ce_score in ordine decrescente
         results.sort(key=lambda x: x["ce_score"], reverse=True)
         return results
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

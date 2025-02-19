@@ -1,21 +1,18 @@
 """
-Embedding Manager Module
---------------------------
-This module is responsible for generating text embeddings and splitting long texts into manageable chunks.
-It uses SentenceTransformer models (e.g., all-MiniLM-L6-v2, all-mpnet-base-v2, all-distilroberta-v1) to produce
-dense vector representations of text.
-The module implements a chunking strategy that:
-  - Splits text into sentences using NLTK’s sent_tokenize.
-  - Groups sentences into chunks of approximately a specified number of words (chunk_size),
-    with a defined overlap (overlap) between consecutive chunks.
-If the text is short (e.g., fewer than 50 words), it is returned as a single chunk.
-These embeddings and chunks are used later by the search engine for retrieval.
-"""
+embedding_manager.py
+--------------------
+Questo modulo si occupa di creare le embedding dense dei testi sfruttando modelli SentenceTransformer.
+In caso di testi lunghi, delega il chunking al modulo chunker.py, così da spezzare i documenti in segmenti
+più piccoli (chunk) e quindi creare embedding per ogni chunk.
 
+Riferimenti:
+- SentenceTransformers: https://www.sbert.net/
+"""
 import nltk
 nltk.download("punkt_tab", quiet=True)
 from nltk.tokenize import sent_tokenize
 from sentence_transformers import SentenceTransformer
+from .chunker import dynamic_chunk_text
 
 class EmbeddingManager:
     EMBEDDER_OPTIONS = {
@@ -39,13 +36,19 @@ class EmbeddingManager:
     def embed_text(self, text: str):
         """
         Ritorna (chunks, embeddings).
-        Se il testo è breve (<50 parole), un solo chunk; altrimenti chunking.
+        Se il testo è breve (<50 parole), viene restituito un solo chunk.
+        Per file Excel (identificati dal marker [EXCEL]), ogni riga viene trattata come un chunk.
         """
-        words = text.split()
-        if len(words) < 50:
-            chunks = [text]
+        if text.startswith("[EXCEL]"):
+            # Ogni linea (eccetto il marker) corrisponde a un dizionario in formato testo
+            lines = text.split("\n")[1:]
+            chunks = [line.strip() for line in lines if line.strip()]
         else:
-            chunks = chunk_text(text, chunk_size=self.chunk_size, overlap=self.overlap)
+            words = text.split()
+            if len(words) < 50:
+                chunks = [text]
+            else:
+                chunks = dynamic_chunk_text(text, chunk_size=self.chunk_size, overlap=self.overlap)
         embeddings = self.model.encode(chunks)
         return chunks, embeddings
 
@@ -54,46 +57,4 @@ class EmbeddingManager:
         Ritorna l'embedding (1D) della query.
         """
         return self.model.encode([query])[0]
-
-def chunk_text(text, chunk_size=100, overlap=20):
-    """
-    Spezza il testo in chunk di ~chunk_size parole, con overlap di ~overlap parole.
-    Qui usiamo la segmentazione su frasi (sent_tokenize) come base.
-    """
-    sentences = sent_tokenize(text)
-    chunks = []
-    current_chunk = []
-    current_length = 0
-
-    for sent in sentences:
-        sent_words = sent.split()
-        sent_len = len(sent_words)
-        if current_length + sent_len > chunk_size and current_chunk:
-            chunks.append(" ".join(current_chunk))
-            # overlap
-            if overlap > 0:
-                overlap_chunk = []
-                total_overlap = 0
-                for s in reversed(current_chunk):
-                    s_words = s.split()
-                    if total_overlap + len(s_words) > overlap:
-                        break
-                    overlap_chunk.insert(0, s)
-                    total_overlap += len(s_words)
-            else:
-                overlap_chunk = []
-            current_chunk = overlap_chunk.copy()
-            current_length = sum(len(x.split()) for x in current_chunk)
-
-        current_chunk.append(sent)
-        current_length += sent_len
-
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
-    return chunks
-
-
-
-
-
 

@@ -1,18 +1,11 @@
-"""
-Configuration Module
-----------------------
-This module manages the configuration parameters for the rag_system.
-It defines default values (such as embedding model key, chunk size, overlap, cross-encoder model, etc.)
-and provides methods to load and save these parameters from/to a JSON file (rag_system.json).
-This centralized configuration management allows the system to be easily tuned and persistently configured.
-"""
-
+# config.py
 import json
 import os
 
 _CONFIG_FILENAME = "rag_system.json"
 _THIS_DIR = os.path.dirname(__file__)
 CONFIG_FILE = os.path.join(_THIS_DIR, _CONFIG_FILENAME)
+TRANSFORMERS_CACHE = "C:/Users/rober/Dropbox/Applicazioni/shibot/CHATGPT/rag_system/models"
 
 class Config:
     EMBEDDING_MODEL_KEY = "MiniLM"            # embedding Sentence Transformers. Valori possibili: "MiniLM", "MPNet", "DistilRoBERTa"
@@ -60,3 +53,4 @@ class Config:
         }
         with open(CONFIG_FILE, "w") as f:
             json.dump(data, f, indent=4)
+

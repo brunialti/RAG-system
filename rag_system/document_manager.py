@@ -3,12 +3,23 @@ import time
 import hashlib
 from .utils import compute_md5
 
+
+# Funzione di normalizzazione: rimuove spazi extra e converte in minuscolo
+def normalize_value(value):
+    import pandas as pd
+    if pd.isnull(value):
+        return ""
+    # Converte il valore in stringa, elimina spazi all'inizio/fine e converte in minuscolo
+    return str(value).strip().lower()
+
+
 def load_document(file_path):
     """
     Carica un documento da file.
-    Supporta i formati: .txt, .md, .doc, .docx, .pdf.
-    Per i file di testo prova diverse codifiche.
-    Per i DOCX, prova prima python‑docx, poi docx2txt e infine textract.
+    Supporta formati: .txt, .md, .doc, .docx, .pdf, .xls, .xlsx.
+    Per i file Excel, legge tutti i fogli con pandas, elimina righe e colonne vuote,
+    aggrega ogni 5 righe in un chunk e normalizza ogni valore.
+    Se il formato non è compatibile, solleva un’eccezione.
     """
     ext = os.path.splitext(file_path)[1].lower()
 
@@ -36,7 +47,6 @@ def load_document(file_path):
         if ext == ".doc":
             raise ValueError("Formato .doc non supportato. Usa .docx.")
         else:
-            # Prova prima con python-docx
             try:
                 from docx import Document
                 doc = Document(file_path)
@@ -47,7 +57,6 @@ def load_document(file_path):
                     print(f"[DEBUG] python-docx ha restituito un contenuto vuoto per {file_path}.")
             except Exception as e:
                 print(f"[DEBUG] Errore con python‑docx su {file_path}: {e}")
-            # Fallback: prova con docx2txt
             try:
                 import docx2txt
                 text = docx2txt.process(file_path)
@@ -57,7 +66,6 @@ def load_document(file_path):
                     print(f"[DEBUG] docx2txt ha restituito un contenuto vuoto per {file_path}.")
             except Exception as e:
                 print(f"[DEBUG] Errore con docx2txt su {file_path}: {e}")
-            # Fallback: prova con textract
             try:
                 import textract
                 text = textract.process(file_path).decode("utf-8")
@@ -67,6 +75,47 @@ def load_document(file_path):
                     raise ValueError("textract ha restituito un contenuto vuoto.")
             except Exception as e:
                 raise ValueError(f"Errore nella lettura del file DOCX ({file_path}): {e}")
+
+    elif ext in [".xls", ".xlsx"]:
+        try:
+            import pandas as pd
+        except ImportError:
+            raise ImportError("Installa pandas per leggere file Excel.")
+        try:
+            sheets = pd.read_excel(file_path, sheet_name=None)
+        except Exception as e:
+            raise ValueError(f"Errore nella lettura del file Excel ({file_path}): {e}")
+        all_chunks = []
+        valid_sheet_found = False
+        rows_per_chunk = 5  # Aggrega 5 righe per chunk
+        for sheet_name, df in sheets.items():
+            # Elimina righe e colonne interamente vuote
+            df = df.dropna(how='all').dropna(axis=1, how='all')
+            if df.empty or len(df.columns) == 0:
+                continue
+            valid_sheet_found = True
+            header = df.columns.tolist()
+            num_rows = len(df)
+            for start in range(0, num_rows, rows_per_chunk):
+                chunk_rows = []
+                for idx in range(start, min(start + rows_per_chunk, num_rows)):
+                    row = df.iloc[idx]
+                    parts = []
+                    for col in header:
+                        norm_value = normalize_value(row[col])
+                        if norm_value:
+                            parts.append(f"{col} è {norm_value}")
+                    if parts:
+                        row_text = f"riga {idx + 2}: " + ", ".join(parts)
+                        chunk_rows.append(row_text)
+                if chunk_rows:
+                    chunk_text = f"Foglio '{sheet_name}', righe {start + 2}-{min(start + rows_per_chunk, num_rows) + 1}: " + " | ".join(
+                        chunk_rows)
+                    all_chunks.append(chunk_text)
+        if not valid_sheet_found:
+            raise ValueError("Formato Excel non compatibile: nessun foglio contiene dati validi.")
+        return "[EXCEL]\n" + "\n".join(all_chunks)
+
     else:
         raise ValueError(f"Formato {ext} non supportato.")
 
@@ -79,10 +128,21 @@ class DocumentManager:
     def add_document(self, doc_id, content, metadata=None, file_path=None):
         """
         Aggiunge un documento. Se file_path viene fornito e metadata è None,
-        genera metadata con 'file_path' e 'source' (nome del file).
+        genera metadata con 'file_path' e 'source'.
+        Per file Excel, aggiunge anche il campo 'type': 'excel'.
         """
-        if metadata is None and file_path is not None:
-            metadata = {"file_path": file_path, "source": os.path.basename(file_path)}
+        if file_path is not None:
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext in [".xls", ".xlsx"]:
+                if metadata is None:
+                    metadata = {}
+                metadata["type"] = "excel"
+                if "file_path" not in metadata:
+                    metadata["file_path"] = file_path
+                if "source" not in metadata:
+                    metadata["source"] = os.path.basename(file_path)
+            elif metadata is None:
+                metadata = {"file_path": file_path, "source": os.path.basename(file_path)}
         self.documents[doc_id] = {"content": content, "metadata": metadata or {}}
 
     def delete_document(self, doc_id):
@@ -97,21 +157,16 @@ class DocumentManager:
     def load_documents_from_directory(self, directory_path):
         start_time = time.time()
         docs = {}
-        duplicates_count = 0  # Inizializza il contatore duplicati
+        duplicates_count = 0
         for root, dirs, files in os.walk(directory_path):
             for file in files:
                 try:
                     file_path = os.path.join(root, file)
                     content = load_document(file_path)
-
-                    # Calcola l'MD5 del contenuto (convertito in UTF-8)
-                    # Nota: questo funziona se content è una stringa non vuota
                     md5 = compute_md5(content)
-
-                    # Se il file è già stato processato, incrementa il contatore e salta
                     if md5 in self.document_hashes:
                         duplicates_count += 1
-                        print(f"Skipped. Document duplicated (same MD5).")
+                        print("Skipped. Document duplicated (same MD5).")
                         continue
                     else:
                         self.document_hashes[md5] = file_path
@@ -119,6 +174,9 @@ class DocumentManager:
                             "content": content,
                             "metadata": {"file_path": file_path, "source": os.path.basename(file_path)}
                         }
+                    ext = os.path.splitext(file_path)[1].lower()
+                    if ext in [".xls", ".xlsx"]:
+                        docs[file_path]["metadata"]["type"] = "excel"
                 except Exception as e:
                     print(f"Saltato {file}: {e}")
         self.documents.update(docs)
@@ -126,12 +184,7 @@ class DocumentManager:
         print("==== Summary ====")
         print(f"Inserted docs: {len(docs)}")
         print(f"Skipped docs (MD5 duplicates): {duplicates_count}")
-        print("Duplicate chunks: 0 (0.00% of chunk attempts)")
         print(f"Elapsed time: {elapsed:.2f} s")
         print("=================")
         print("Note: Document chunking is handled during indexing, not at document load time.")
         return docs
-
-
-
-

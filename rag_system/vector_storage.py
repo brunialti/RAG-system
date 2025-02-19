@@ -1,67 +1,59 @@
 """
-Vector Storage Module
------------------------
-This module provides functionality for storing and indexing document representations for retrieval.
-It implements a multi-index approach using the following technologies:
+vector_storage.py
+-----------------
+Questo modulo gestisce la persistenza degli indici FAISS, BM25 e TF-IDF, consentendo di salvare e caricare
+lo stato su disco. Fornisce anche l'interfaccia per aggiungere vettori (chunk + embedding) e rimuovere documenti.
 
-1. FAISS:
-   - Uses FAISS (IndexFlatL2) to index dense embeddings produced by SentenceTransformer.
-2. BM25:
-   - Uses BM25Okapi to build a sparse retrieval index over tokenized, aggregated document texts.
-3. Persistent TF-IDF Index:
-   - Uses scikit-learn’s TfidfVectorizer to build and persist an index computed over the aggregated texts.
-   - This index is saved and loaded from disk, reducing on-the-fly computation.
-
-Additionally, the VectorStorageManager class manages multiple persistent storages.
+Riferimenti:
+- FAISS: https://faiss.ai/
+- BM25: implementazione rank_bm25
+- TF-IDF: scikit-learn TfidfVectorizer
 """
 
 import os
 import pickle
 import faiss
 import numpy as np
-import shutil
 
 import nltk
 nltk.download("punkt", quiet=True)
 from nltk.tokenize import word_tokenize
 from rank_bm25 import BM25Okapi
 
-from rag_system.embedding_manager import EmbeddingManager
-
+from sklearn.feature_extraction.text import TfidfVectorizer
+from .embedding_manager import EmbeddingManager
 
 class VectorStorage:
     def __init__(self, embedding_dim, embedder="all-MiniLM-L6-v2", indices_present=None):
         if indices_present is None:
-            # By default, both dense (faiss) and BM25 indices are enabled.
-            indices_present = ["faiss", "bm25"]
+            indices_present = ["faiss", "bm25", "tfidf"]
         self.embedding_dim = embedding_dim
         self.embedder = embedder
         self.indices_present = indices_present
 
-        # FAISS index for dense vector search
+        # Inizializza FAISS
         self.index = faiss.IndexFlatL2(embedding_dim)
 
-        # BM25 components for sparse search
+        # BM25
         self.bm25_corpus = []
         self.bm25_doc_ids = []
         self.bm25 = None
 
-        # Document-level storage:
-        # documents: doc_id -> { 'chunks': [ { "chunk": ..., "source": ... }, ... ] }
-        self.documents = {}
-        self.signatures = {}  # MD5 hash to detect duplicates
-
-        # Chunk-level storage:
-        self.doc_ids = []      # List of doc_ids for each chunk
-        self.chunks_data = []  # List of dicts: { "doc_id": ..., "chunk": ..., "source": ... }
-
-        # Persistent TF-IDF index components
+        # TF-IDF
+        self.tfidf_index = None
         self.tfidf_vectorizer = None
-        self.tfidf_matrix = None
-        self.tfidf_doc_ids = None
+        self.tfidf_doc_ids = []
+
+        # Metadati
+        self.documents = {}   # doc_id -> { 'chunks': [...] }
+        self.signatures = {}  # MD5 -> doc_id
+        self.doc_ids = []
+        self.chunks_data = []
 
     def add_vector(self, vector, doc_id, chunk_text, source=None):
-        # Add the vector to the FAISS index.
+        """
+        Aggiunge un vettore (embedding) e il relativo chunk nel dataset.
+        """
         vector = np.array(vector, dtype="float32").reshape(1, -1)
         self.index.add(vector)
 
@@ -71,7 +63,6 @@ class VectorStorage:
             "chunk": chunk_text,
             "source": source
         })
-
         if doc_id not in self.documents:
             self.documents[doc_id] = {'chunks': []}
         self.documents[doc_id]['chunks'].append({
@@ -79,12 +70,10 @@ class VectorStorage:
             "source": source
         })
 
-        # Invalidate the persistent TF-IDF index because new data has been added.
-        self.tfidf_vectorizer = None
-        self.tfidf_matrix = None
-        self.tfidf_doc_ids = None
-
     def remove_document(self, doc_id, embedding_manager: EmbeddingManager):
+        """
+        Rimuove un documento dal dataset e ricostruisce gli indici.
+        """
         if doc_id not in self.documents:
             return False
         del self.documents[doc_id]
@@ -98,23 +87,25 @@ class VectorStorage:
         self.doc_ids = new_doc_ids
         self.chunks_data = new_chunks_data
 
-        # Remove the signature for the document.
+        # rimuove la firma
         keys_to_remove = [k for k, v in self.signatures.items() if v == doc_id]
         for k in keys_to_remove:
             del self.signatures[k]
 
-        # Rebuild indices.
+        self.rebuild_all_indices(embedding_manager)
+        return True
+
+    def rebuild_all_indices(self, embedding_manager: EmbeddingManager):
+        """
+        Ricostruisce tutti gli indici (FAISS, BM25, TF-IDF).
+        """
         self.rebuild_faiss_index(embedding_manager)
         if "bm25" in self.indices_present:
             self.rebuild_bm25_index()
-        # Invalidate the persistent TF-IDF index.
-        self.tfidf_vectorizer = None
-        self.tfidf_matrix = None
-        self.tfidf_doc_ids = None
+        if "tfidf" in self.indices_present:
+            self.rebuild_tfidf_index()
 
-        return True
-
-    # ------------------- FAISS Index -------------------
+    # FAISS
     def rebuild_faiss_index(self, embedding_manager: EmbeddingManager):
         if not self.chunks_data:
             self.index = faiss.IndexFlatL2(self.embedding_dim)
@@ -134,96 +125,89 @@ class VectorStorage:
             cdata = self.chunks_data[idx]
             results.append({
                 "doc_id": cdata["doc_id"],
-                "score": float(dist),  # Distance (will be converted to similarity later)
+                "score": float(dist),
                 "chunk": cdata["chunk"],
                 "source": cdata["source"]
             })
         return results
 
-    # ------------------- BM25 Index -------------------
+    # BM25
     def rebuild_bm25_index(self):
-        if "bm25" not in self.indices_present:
-            print("[DEBUG] BM25 index is not enabled in indices_present.")
-            return
+        """
+        Ricostruisce il corpus per BM25. Se non ci sono documenti,
+        self.bm25 rimarrà None per evitare errori di divisione.
+        """
         doc_ids_list = []
         corpus = []
         for doc_id, doc_info in self.documents.items():
-            text = " ".join(ch["chunk"] for ch in doc_info["chunks"])
-            doc_ids_list.append(doc_id)
-            corpus.append(text)
-        print(f"[DEBUG] Rebuilding BM25 index for {len(corpus)} documents.")
-        tokenized_corpus = []
-        for doc_text in corpus:
-            tokens = word_tokenize(doc_text.lower())
-            tokenized_corpus.append(tokens)
+            text = " ".join(ch["chunk"] for ch in doc_info["chunks"]).strip()
+            if text:
+                doc_ids_list.append(doc_id)
+                corpus.append(text)
+
+        if not corpus:
+            # Se non ci sono documenti o testi vuoti, impostiamo bm25 a None
+            self.bm25_corpus = []
+            self.bm25_doc_ids = []
+            self.bm25 = None
+            return
+
+        from nltk.tokenize import word_tokenize
+        tokenized_corpus = [word_tokenize(doc_text.lower()) for doc_text in corpus]
         self.bm25_corpus = tokenized_corpus
         self.bm25_doc_ids = doc_ids_list
+
+        from rank_bm25 import BM25Okapi
         self.bm25 = BM25Okapi(self.bm25_corpus)
-        print("[DEBUG] BM25 index rebuilt. Corpus size:", len(self.bm25_corpus))
 
     def search_bm25(self, query_text, top_k=5):
-        if "bm25" not in self.indices_present or not self.bm25:
-            print("[DEBUG] BM25 index is not available.")
+        if not self.bm25:
             return []
         tokens = word_tokenize(query_text.lower())
-        print(f"[DEBUG] BM25 query tokens: {tokens}")
         scores = self.bm25.get_scores(tokens)
-        print(f"[DEBUG] BM25 raw scores: {scores}")
         sorted_idx = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
         results = []
         for idx in sorted_idx:
             doc_id = self.bm25_doc_ids[idx]
-            score_val = float(scores[idx])
-            print(f"[DEBUG] BM25 result - doc_id: {doc_id}, score: {score_val}")
             results.append({
                 "doc_id": doc_id,
-                "score": score_val,
-                "chunk": "document-level",  # Indicator that this is a document-level score
+                "score": float(scores[idx]),
+                "chunk": "document-level",
                 "source": "bm25"
             })
         return results
 
-    # ------------------- Persistent TF-IDF Index -------------------
+    # TF-IDF
     def rebuild_tfidf_index(self):
-        """
-        Builds a TF-IDF index at the document level by aggregating all chunks of each document.
-        The index (vectorizer, matrix, and list of doc_ids) is stored in memory.
-        """
-        doc_ids = []
         corpus = []
+        self.tfidf_doc_ids = []
         for doc_id, doc_info in self.documents.items():
-            full_text = " ".join(ch["chunk"] for ch in doc_info.get("chunks", []))
-            doc_ids.append(doc_id)
-            corpus.append(full_text)
-        print(f"[DEBUG] Rebuilding TF-IDF index for {len(corpus)} documents.")
-        if len(corpus) == 0:
+            text = " ".join(ch["chunk"] for ch in doc_info.get("chunks", []))
+            corpus.append(text)
+            self.tfidf_doc_ids.append(doc_id)
+        if corpus:
+            vectorizer = TfidfVectorizer()
+            self.tfidf_index = vectorizer.fit_transform(corpus)
+            self.tfidf_vectorizer = vectorizer
+        else:
+            self.tfidf_index = None
             self.tfidf_vectorizer = None
-            self.tfidf_matrix = None
-            self.tfidf_doc_ids = None
-            return
-        from sklearn.feature_extraction.text import TfidfVectorizer
-        self.tfidf_vectorizer = TfidfVectorizer()
-        self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(corpus)
-        self.tfidf_doc_ids = doc_ids
-        print("[DEBUG] TF-IDF index rebuilt. Vocabulary size:", len(self.tfidf_vectorizer.vocabulary_))
 
     def get_tfidf_index(self):
-        """
-        Returns a tuple (tfidf_vectorizer, tfidf_matrix, tfidf_doc_ids).
-        If the TF-IDF index has not been built, it is rebuilt.
-        """
-        if self.tfidf_vectorizer is None or self.tfidf_matrix is None or self.tfidf_doc_ids is None:
-            self.rebuild_tfidf_index()
-        return self.tfidf_vectorizer, self.tfidf_matrix, self.tfidf_doc_ids
+        return self.tfidf_vectorizer, self.tfidf_index, self.tfidf_doc_ids
 
-    # ------------------- Saving and Loading -------------------
-    def save(self, storage_dir):
+    # SALVATAGGIO / CARICAMENTO
+    def save(self, storage_dir, embedding_manager: EmbeddingManager):
+        self.rebuild_all_indices(embedding_manager)
+
         if not os.path.exists(storage_dir):
             os.makedirs(storage_dir)
-        # Save FAISS index
+
+        # Salva FAISS
         faiss_path = os.path.join(storage_dir, "index.faiss")
         faiss.write_index(self.index, faiss_path)
-        # Save BM25 index (if present)
+
+        # Salva BM25
         bm25_path = os.path.join(storage_dir, "index_bm25.pkl")
         if "bm25" in self.indices_present and self.bm25 is not None:
             with open(bm25_path, "wb") as f_bm:
@@ -234,7 +218,21 @@ class VectorStorage:
         else:
             if os.path.exists(bm25_path):
                 os.remove(bm25_path)
-        # Save metadata
+
+        # Salva TF-IDF
+        tfidf_path = os.path.join(storage_dir, "tfidf.pkl")
+        if "tfidf" in self.indices_present and self.tfidf_index is not None:
+            with open(tfidf_path, "wb") as f_tfidf:
+                pickle.dump({
+                    "tfidf_index": self.tfidf_index,
+                    "tfidf_vectorizer": self.tfidf_vectorizer,
+                    "tfidf_doc_ids": self.tfidf_doc_ids
+                }, f_tfidf)
+        else:
+            if os.path.exists(tfidf_path):
+                os.remove(tfidf_path)
+
+        # Salva metadati
         meta_path = os.path.join(storage_dir, "metadata.pkl")
         meta = {
             "embedding_dim": self.embedding_dim,
@@ -247,24 +245,18 @@ class VectorStorage:
         }
         with open(meta_path, "wb") as f:
             pickle.dump(meta, f)
-        # Save persistent TF-IDF index
-        tfidf_path = os.path.join(storage_dir, "tfidf.pkl")
-        with open(tfidf_path, "wb") as f_tfidf:
-            pickle.dump({
-                "tfidf_vectorizer": self.tfidf_vectorizer,
-                "tfidf_matrix": self.tfidf_matrix,
-                "tfidf_doc_ids": self.tfidf_doc_ids
-            }, f_tfidf)
-        return faiss_path, bm25_path, meta_path, tfidf_path
+        return faiss_path, bm25_path, tfidf_path, meta_path
 
     @classmethod
     def load(cls, storage_dir):
         faiss_path = os.path.join(storage_dir, "index.faiss")
         bm25_path = os.path.join(storage_dir, "index_bm25.pkl")
-        meta_path = os.path.join(storage_dir, "metadata.pkl")
         tfidf_path = os.path.join(storage_dir, "tfidf.pkl")
+        meta_path = os.path.join(storage_dir, "metadata.pkl")
+
         with open(meta_path, "rb") as f:
             meta = pickle.load(f)
+
         embedding_dim = meta["embedding_dim"]
         embedder = meta.get("embedder", "all-MiniLM-L6-v2")
         doc_ids = meta.get("doc_ids", [])
@@ -272,25 +264,63 @@ class VectorStorage:
         documents = meta.get("documents", {})
         signatures = meta.get("signatures", {})
         indices_present = meta.get("indices_present", ["faiss"])
+
         storage = cls(embedding_dim, embedder=embedder, indices_present=indices_present)
-        storage.index = faiss.read_index(os.path.join(storage_dir, "index.faiss"))
         storage.doc_ids = doc_ids
         storage.chunks_data = chunks_data
         storage.documents = documents
         storage.signatures = signatures
+
+        # Carica FAISS
+        storage.index = faiss.read_index(faiss_path)
+
+        # Carica BM25
         if "bm25" in indices_present and os.path.exists(bm25_path):
             with open(bm25_path, "rb") as f_bm:
                 bm25_data = pickle.load(f_bm)
             storage.bm25_corpus = bm25_data["bm25_corpus"]
             storage.bm25_doc_ids = bm25_data["bm25_doc_ids"]
             storage.bm25 = BM25Okapi(storage.bm25_corpus)
-        if os.path.exists(tfidf_path):
+
+        # Carica TF-IDF
+        if "tfidf" in indices_present and os.path.exists(tfidf_path):
             with open(tfidf_path, "rb") as f_tfidf:
                 tfidf_data = pickle.load(f_tfidf)
+            storage.tfidf_index = tfidf_data["tfidf_index"]
             storage.tfidf_vectorizer = tfidf_data["tfidf_vectorizer"]
-            storage.tfidf_matrix = tfidf_data["tfidf_matrix"]
             storage.tfidf_doc_ids = tfidf_data["tfidf_doc_ids"]
+
         return storage
+
+    def add_document_from_excel(self, file_path, embedding_manager, min_chunks=5):
+        df = pd.read_excel(file_path)
+        header = df.columns.tolist()
+
+        def row_to_sentence(row):
+            values = row.tolist()
+            return f"Riga con {', '.join([f'{header[i]}: {values[i]}' for i in range(len(header))])}."
+
+        rows_as_sentences = df.apply(row_to_sentence, axis=1).tolist()
+        full_text_representation = "\n".join(rows_as_sentences)
+
+        doc_id = compute_md5(full_text_representation)
+
+        if doc_id in self.signatures.values():
+            print(f"[INFO] Documento Excel già presente, saltato: {file_path}")
+            return None
+
+        if len(rows_as_sentences) <= min_chunks:
+            chunks, embeddings = embedding_manager.embed_text(full_text_representation)
+        else:
+            chunks = rows_as_sentences
+            embeddings = embedding_manager.model.encode(chunks)
+
+        for chunk, embedding in zip(chunks, embeddings):
+            self.add_vector(embedding, doc_id, chunk, source=os.path.basename(file_path))
+
+        self.signatures[doc_id] = doc_id
+
+        return doc_id
 
 
 class VectorStorageManager:
@@ -299,9 +329,8 @@ class VectorStorageManager:
 
     def create_storage(self, name, embedding_dim, embedder="all-MiniLM-L6-v2"):
         if name in self.storages:
-            raise ValueError(f"A storage with the name '{name}' already exists.")
-        # By default, both FAISS and BM25 indices are enabled.
-        new_storage = VectorStorage(embedding_dim, embedder=embedder, indices_present=["faiss", "bm25"])
+            raise ValueError(f"Esiste già uno storage con nome '{name}'.")
+        new_storage = VectorStorage(embedding_dim, embedder=embedder, indices_present=["faiss","bm25","tfidf"])
         self.storages[name] = new_storage
         return new_storage
 
@@ -314,17 +343,18 @@ class VectorStorageManager:
     def delete_storage(self, name, base_dir):
         if name in self.storages:
             del self.storages[name]
+        import shutil
         storage_dir = os.path.join(base_dir, name)
         if os.path.exists(storage_dir):
             shutil.rmtree(storage_dir)
         return True
 
-    def save_storage(self, name, base_dir):
+    def save_storage(self, name, base_dir, embedding_manager: EmbeddingManager):
         storage = self.get_storage(name)
         if not storage:
-            raise ValueError(f"Storage '{name}' not found.")
+            raise ValueError(f"Storage '{name}' non trovato.")
         storage_dir = os.path.join(base_dir, name)
-        storage.save(storage_dir)
+        storage.save(storage_dir, embedding_manager)
 
     def load_storage(self, name, base_dir):
         storage_dir = os.path.join(base_dir, name)
@@ -355,6 +385,11 @@ class VectorStorageManager:
                     except Exception:
                         pass
         return persistent
+
+
+
+
+
 
 
 

@@ -1,12 +1,13 @@
 """
-Chunker Module
---------------
-This module implements dynamic text chunking functionality.
-It first attempts to split the input text into sentences using NLTK’s sent_tokenize, then groups these sentences
-into chunks of an approximate target length (chunk_size) with a specified overlap (overlap) between chunks.
-If the sentence-based splitting results in too few chunks (less than a defined minimum), a fallback mechanism
-splits the text directly based on word counts.
-This ensures that long texts are divided into semantically coherent segments for subsequent embedding.
+chunker.py
+----------
+Questo modulo si occupa di suddividere (chunking) un testo lungo in porzioni più brevi e coerenti.
+Utilizza un approccio basato sulle frasi con overlap. In caso di testo troppo breve (numero di chunk
+inferiore a una certa soglia), fa un fallback spezzando il testo in base a un conteggio di parole.
+
+Riferimenti:
+- NLTK per sent_tokenize
+- Logica di chunking basata su parole e overlap
 """
 
 import nltk
@@ -15,21 +16,23 @@ from nltk.tokenize import sent_tokenize
 
 def dynamic_chunk_text(text, chunk_size=100, overlap=20, min_chunks=3):
     """
-    Suddivide il testo in chunk in base al numero di parole,
-    cercando di mantenere intatte le frasi. Se il tokenizzatore
-    trova pochissime frasi ma il testo è lungo, usa un fallback
-    basato sul conteggio delle parole.
+    Suddivide il testo in chunk di lunghezza ~chunk_size parole, cercando di mantenere intatte le frasi.
+    Se il numero di chunk è minore di min_chunks, fa fallback su un chunking basato su parole.
+
+    :param text: testo completo da suddividere
+    :param chunk_size: numero approssimativo di parole per chunk
+    :param overlap: numero di parole sovrapposte tra chunk consecutivi
+    :param min_chunks: numero minimo di chunk desiderato, se non viene raggiunto si fa fallback
+    :return: lista di chunk (stringhe)
     """
     words = text.split()
     if len(words) <= chunk_size:
         return [text]
 
-    # Prova a suddividere in frasi
     sentences = sent_tokenize(text)
     if not sentences:
         return [text]
 
-    # Chunking basato sulle frasi
     chunks = []
     current_chunk = []
     current_length = 0
@@ -39,7 +42,7 @@ def dynamic_chunk_text(text, chunk_size=100, overlap=20, min_chunks=3):
         s_len = len(s_words)
         if current_length + s_len > chunk_size and current_chunk:
             chunks.append(" ".join(current_chunk))
-            # Calcola overlap
+            # Calcolo overlap
             if overlap > 0:
                 overlap_chunk = []
                 total_overlap = 0
@@ -53,21 +56,21 @@ def dynamic_chunk_text(text, chunk_size=100, overlap=20, min_chunks=3):
                 overlap_chunk = []
             current_chunk = overlap_chunk.copy()
             current_length = len(" ".join(current_chunk).split())
+
         current_chunk.append(sentence)
         current_length += s_len
+
     if current_chunk:
         chunks.append(" ".join(current_chunk))
 
-    # Se il numero di chunk è troppo basso rispetto al testo, fallback
     if len(chunks) < min_chunks and len(words) > chunk_size:
-        # Fallback: chunking diretto su parole
+        # Fallback su spezzettamento basato solo sulle parole
         return fallback_chunk_by_words(words, chunk_size, overlap)
     return chunks
 
 def fallback_chunk_by_words(words, chunk_size, overlap):
     """
-    Fallback: suddivide un array di parole in chunk
-    di lunghezza ~chunk_size con overlap.
+    Fallback: suddivide un array di parole in chunk di lunghezza ~chunk_size con overlap.
     """
     chunks = []
     i = 0
@@ -76,3 +79,4 @@ def fallback_chunk_by_words(words, chunk_size, overlap):
         chunks.append(" ".join(chunk_words))
         i += max(chunk_size - overlap, 1)
     return chunks
+

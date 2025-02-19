@@ -1,16 +1,7 @@
-"""
-BM25 Retriever Module
-----------------------
-This module implements a BM25 retrieval mechanism using the BM25Okapi algorithm.
-It tokenizes input documents using NLTK's word_tokenize (converted to lowercase) to build a corpus.
-Given a query, it computes BM25 scores for each document in the corpus and retrieves the top N documents.
-This sparse retrieval method serves as a complementary approach to dense vector search.
-"""
-
+# rag_system/bm25_retriever.py
 from rank_bm25 import BM25Okapi
 import nltk
-
-nltk.download("punkt", quiet=True)
+#nltk.download("punkt", quiet=True)
 from nltk.tokenize import word_tokenize
 
 

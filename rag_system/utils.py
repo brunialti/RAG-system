@@ -1,11 +1,4 @@
-"""
-Utilities Module
-----------------
-This module provides miscellaneous utility functions used across the rag_system.
-For example, it includes the compute_md5 function, which computes the MD5 hash of a given text (encoded in UTF-8),
-useful for detecting duplicate documents.
-Other helper functions may be added here as needed.
-"""
+import uuid
 import hashlib
 
 '''
@@ -16,3 +9,10 @@ def generate_doc_id():
 
 def compute_md5(content: str) -> str:
     return hashlib.md5(content.encode("utf-8")).hexdigest()
+
+def compute_file_md5(file_path: str) -> str:
+    hash_md5 = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
