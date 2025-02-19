@@ -80,9 +80,9 @@ Re-ranking:
 
 ---
 
-<tt>
-3) MODULE STRUCTURE
 
+3) MODULE STRUCTURE
+<tt>
 your_app_root_directory/
 ├── rag_system/
 │   ├── persistent_stores/         # Vector store directory (created at first store creation)
