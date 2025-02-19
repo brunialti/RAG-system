@@ -85,8 +85,8 @@ Re-ranking:
 
 your_app_root_directory/
 ├── rag_system/
-│   ├── persistent_stores/         # Vector store directory (created automatically)
-│   │   └── TEST/                      # Example Vector Store
+│   ├── persistent_stores/         # Vector store directory (created at first store creation)
+│   │   └── TEST/                      # Example Vector Store (one directory for each store)
 │   │       ├── index.faiss            # FAISS index
 │   │       ├── index_bm25.pkl         # BM25 index
 │   │       ├── index.faiss            # FAISS index
