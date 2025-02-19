@@ -80,7 +80,7 @@ Re-ranking:
 
 ---
 
-<code>
+<tt>
 3) MODULE STRUCTURE
 
 your_app_root_directory/
@@ -115,7 +115,7 @@ your_app_root_directory/
 ├── setup_models.py                # Downloads local models from HuggingFace
 ├── requiremnts.txt                # Required libraries
 └── config.json                    # Configuration file for UI_manager.py
-</code>
+</tt>
 
 
 Module Details:
