@@ -92,11 +92,11 @@ your_app_root_directory/
 │   │       ├── tfidf.pkl              # TF-IDF index
 │   │       └── metadata.pkl           # Metadata index
 │   ├── models/                    # Local models (installed by setup_models.py)
-│   │   ├── all-distilroberta-v1
-│   │   ├── all-MiniLM-L6-v2
-│   │   ├── all-mpnet-base-v2
-│   │   ├── cross-encoder
-│   │   └── cross-encoder_ms-marco-MiniLM-L-6-v2
+│   │   ├── all-distilroberta-v1/
+│   │   ├── all-MiniLM-L6-v2/
+│   │   ├── all-mpnet-base-v2/
+│   │   ├── cross-encoder/
+│   │   └── cross-encoder_ms-marco-MiniLM-L-6-v2/
 │   ├── __init__.py                # Initializes the rag_system package
 │   ├── bm25_retriever.py          # BM25 retrieval logic
 │   ├── chunker.py                 # Dynamic text chunking functions
@@ -104,9 +104,9 @@ your_app_root_directory/
 │   ├── config.py                  # Global configuration (config.json)
 │   ├── document_manager.py        # Document loading and duplicate detection
 │   ├── embedding_manager.py       # Splits documents and computes dense embeddings 
-│   │                              # (delegates chunking to chunker.py)
+│   │                                (delegates chunking to chunker.py)
 │   ├── search_engine.py           # Search strategies: faiss, bm25, ibrido, multi, rrf; includes 
-│   │                              # cross-encoder re-ranking and optional knee detection
+│   │                                cross-encoder re-ranking and optional knee detection
 │   ├── utils.py                   # Helper functions (e.g., MD5 computation)
 │   └── vector_storage.py          # Manages indices (FAISS, BM25, persistent TF-IDF) and metadata
 ├── UI_manager.py                  # Graphical UI for managing the system
