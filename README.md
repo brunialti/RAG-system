@@ -6,10 +6,12 @@ WARNING: This code is a Beta release. It may or may not fully meet your needs.
 Use it "as is" at your own risk.
 <b>Consider RAGWIZ system as a workbench to better understand RAG systems</b> and to practice with.
 No extensive stress or scalability tests have been performed; nevertheless, it should work 
-effectively with stores up to 500,000 chunks at least. The document ingestion module manages 
-documents of the following types: .txt, .doc (with some limitations), .docx, .pdf.
-It can also add  excel files but with unsatisfactory search results and with some dimensions and
-format constraints.
+effectively with stores up to houdred thousand chunks depending on memory size and CPUs. 
+The document ingestion module manages documents of the following types: 
+.txt, .doc (with some limitations), .docx, .pdf.
+It can also accept excel files but be aware that, at this moment, the search results are quite poor,
+suggested spreadsheet dimension is small, and there are shape constraints (only tables with headers
+are correctly indexed). A better chunk/embed algo is required.
 Other document types can be added by modifying document_manager.py, provided that your tools 
 can extract plain text from the desired format.
 
@@ -40,10 +42,7 @@ In practice:
   k candidates, applying min–max normalization to ensure consistency across signals.
 - An optional knee detection algorithm is available to automatically set a cutoff threshold 
   based on the distribution of scores when multiple signals are fused (applicable only to multi-
-  signal fusion strategies).
-- excel files are allowed by the system, provided:
-    • the table has an header
-    • the file is not too big (well, I know it is somehow vague, but I did not tested the system limits...)
+  signal fusion strategies). 
 ---
 
 2) DESIGN AND TECHNICAL CHOICES
