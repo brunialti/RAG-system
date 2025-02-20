@@ -26,7 +26,11 @@ In the Add Documents tab, the LabelFrame "Select doc(s) to store" contains (from
   - and (to the right, arranged vertically) two radiobuttons ("Single Doc" and "All Docs in Folder").
 """
 import os
+import re
 import json
+import threading
+import time
+import uuid
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
 import traceback
@@ -104,8 +108,8 @@ class VectorStoreManagerApp(tk.Tk):
         super().__init__()
         self.UIConfig = UIConfig()
 
-        self.title("Vector Store Manager - UI")
-        self.geometry("1000x800")
+        self.title("Rag System - Control Center")
+        self.geometry("1000x700")
         self.current_store = None
         self.query_results_data = []
 
@@ -157,15 +161,21 @@ class VectorStoreManagerApp(tk.Tk):
         else:
             self.notebook.select(self.tab_store_mngt)
 
-    def set_status(self, message):
-        self.status_label.config(text=message)
+    def set_status(self, message, color=None):
+        """Aggiorna il messaggio nella status bar, impostando un colore personalizzato se specificato."""
+        if color:
+            self.status_label.config(text=message, foreground=color)
+        else:
+            self.status_label.config(text=message, foreground="black")
 
     def create_widgets(self):
         style = ttk.Style()
         style.configure("TNotebook.Tab", padding=[10, 10])
         spacer_height = 10
 
+        # ------------------------------
         # --- Merged Tab: Store Mngt ---
+        # ------------------------------
         self.tab_store_mngt = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_store_mngt, text="Store Mngt")
         self.store_container = ttk.Frame(self.tab_store_mngt)
@@ -175,52 +185,72 @@ class VectorStoreManagerApp(tk.Tk):
         self.store_container.rowconfigure(2, weight=2)  # 20%
         self.store_container.columnconfigure(0, weight=1)
 
-        # LabelFrame "List Store" (row 0)
+        # ---------------------------------------
+        # --- LabelFrame "List Store" --- (row 0)
         self.lf_list_store = ttk.LabelFrame(self.store_container, text="List Store", padding=(10, 5))
         self.lf_list_store.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
-        self.lf_list_store.columnconfigure(0, weight=1)
-        self.lf_list_store.columnconfigure(1, weight=0)
-        self.frame_list_store = ttk.Frame(self.lf_list_store)
-        self.frame_list_store.grid(row=0, column=0, sticky="nsew")
-        self.frame_list_store.rowconfigure(0, weight=1)
-        self.frame_list_store.columnconfigure(0, weight=1)
-        self.frame_list_store.columnconfigure(1, weight=0)
-        self.store_listbox = tk.Listbox(self.frame_list_store, height=10)
-        self.store_listbox.grid(row=0, column=0, sticky="nsew", padx=(0,5), pady=5)
-        self.store_listbox.bind("<<ListboxSelect>>", self.on_store_info_select)
-        self.scroll_list = ttk.Scrollbar(self.frame_list_store, orient="vertical", command=self.store_listbox.yview)
-        self.scroll_list.grid(row=0, column=0, sticky="nse")
-        self.store_listbox.configure(yscrollcommand=self.scroll_list.set)
-        self.frame_list_buttons = ttk.Frame(self.frame_list_store)
-        self.frame_list_buttons.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
-        self.btn_load_store = ttk.Button(self.frame_list_buttons, text="Load Selected Store", command=self.load_selected_store)
-        self.btn_load_store.pack(side=tk.TOP, fill=tk.X, pady=(0,5))
-        self.btn_delete_store = ttk.Button(self.frame_list_buttons, text="Delete Selected Store", command=self.delete_store)
-        self.btn_delete_store.pack(side=tk.TOP, fill=tk.X)
+        self.lf_list_store.rowconfigure(0, weight=1)
+        # Tre colonne: 0 (listbox), 1 (scrollbar), 2 (pulsanti)
+        self.lf_list_store.columnconfigure(0, weight=1)  # listbox si espande
+        self.lf_list_store.columnconfigure(1, weight=0)  # scrollbar fissa
+        self.lf_list_store.columnconfigure(2, weight=0)  # pulsanti fissi
 
-        # LabelFrame "View store" (row 1)
+        # Listbox (colonna 0)
+        self.store_listbox = tk.Listbox(self.lf_list_store, height=10)
+        self.store_listbox.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=5)
+        self.store_listbox.bind("<<ListboxSelect>>", self.on_store_info_select)
+        # Scrollbar (colonna 1)
+        self.scroll_list = ttk.Scrollbar(self.lf_list_store, orient="vertical", command=self.store_listbox.yview)
+        self.scroll_list.grid(row=0, column=1, sticky="ns", padx=(0, 5), pady=5)
+        self.store_listbox.configure(yscrollcommand=self.scroll_list.set)
+        # Frame per i pulsanti (colonna 2)
+        self.frame_list_buttons = ttk.Frame(self.lf_list_store)
+        self.frame_list_buttons.grid(row=0, column=2, sticky="ns", padx=5, pady=5)
+        # Pulsanti in "List Store" (colonna 2)
+        self.btn_load_store = ttk.Button(self.frame_list_buttons, text="Load Selected Store", command=self.load_selected_store)
+        self.btn_load_store.pack(fill=tk.X, pady=(0, 5))
+        self.btn_delete_store = ttk.Button(self.frame_list_buttons, text="Delete Selected Store", command=self.delete_store)
+        self.btn_delete_store.pack(fill=tk.X)
+
+        # ---------------------------------------
+        # --- LabelFrame "View store" --- (row 1)
         self.lf_view_store = ttk.LabelFrame(self.store_container, text="View store", padding=(10, 5))
         self.lf_view_store.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         self.lf_view_store.rowconfigure(1, weight=1)
-        self.lf_view_store.columnconfigure(0, weight=1)
-        self.frame_view_buttons = ttk.Frame(self.lf_view_store)
-        self.frame_view_buttons.grid(row=0, column=0, sticky="e", padx=5, pady=5)
-        self.btn_delete_doc = ttk.Button(self.frame_view_buttons, text="Delete Document", command=self.delete_document)
-        self.btn_delete_doc.pack(side=tk.RIGHT)
-        self.btn_delete_doc["state"] = tk.DISABLED
-        self.store_info_list = tk.Listbox(self.lf_view_store)
-        self.store_info_list.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
-        self.store_info_list.bind("<<ListboxSelect>>", self.on_store_info_select)
-        self.scroll_view = ttk.Scrollbar(self.lf_view_store, orient="vertical", command=self.store_info_list.yview)
-        self.scroll_view.grid(row=1, column=0, sticky="nse")
-        self.store_info_list.configure(yscrollcommand=self.scroll_view.set)
+        # Tre colonne: 0 (listbox), 1 (scrollbar), 2 (pulsanti)
+        self.lf_view_store.columnconfigure(0, weight=1)  # listbox si espande
+        self.lf_view_store.columnconfigure(1, weight=0)  # scrollbar fissa
+        self.lf_view_store.columnconfigure(2, weight=0)  # pulsante fissa
 
-        # LabelFrame "Create store" (row 2)
+        # Listbox (colonna 0)
+        self.store_info_list = tk.Listbox(self.lf_view_store, height=10)
+        self.store_info_list.grid(row=1, column=0, sticky="nsew", padx=(0, 5), pady=5)
+        self.store_info_list.bind("<<ListboxSelect>>", self.on_store_info_select)
+        # Scrollbar (colonna 1)
+        self.scroll_view = ttk.Scrollbar(self.lf_view_store, orient="vertical", command=self.store_info_list.yview)
+        self.scroll_view.grid(row=1, column=1, sticky="ns", padx=(0, 5), pady=5)
+        self.store_info_list.configure(yscrollcommand=self.scroll_view.set)
+        # Frame per i pulsanti (colonna 2)
+        self.frame_view_buttons = ttk.Frame(self.lf_view_store)
+        self.frame_view_buttons.grid(row=1, column=2, sticky="ns", padx=5, pady=5)
+        # Pulsante "Delete selected doc" (colonna 2)
+        self.btn_delete_doc = ttk.Button(self.frame_view_buttons, text="Drop Selected doc(s)", command=self.delete_document)
+        self.btn_delete_doc.pack(fill=tk.X)
+        self.btn_delete_doc["state"] = tk.DISABLED
+
+        # -----------------------------------------
+        # --- LabelFrame "Create store" --- (row 2)
         self.lf_create_store = ttk.LabelFrame(self.store_container, text="Create store", padding=(10, 5))
         self.lf_create_store.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
-        self.lf_create_store.columnconfigure(0, weight=1)
+        self.lf_create_store.rowconfigure(1, weight=1)
+        # Tre colonne: 0 (listbox), 1 (scrollbar), 2 (pulsanti)
+        self.lf_create_store.columnconfigure(0, weight=1)  # listbox si espande
+        self.lf_create_store.columnconfigure(1, weight=0)  # scrollbar fissa
+        self.lf_create_store.columnconfigure(2, weight=0)  # pulsante fissa
+
+        # Labels & Entry box & ComboBox(colonna 0)
         self.frame_create_store = ttk.Frame(self.lf_create_store)
-        self.frame_create_store.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.frame_create_store.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
         self.frame_create_store.columnconfigure(1, weight=1)
         ttk.Label(self.frame_create_store, text="Store Name:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.entry_store_name = ttk.Entry(self.frame_create_store)
@@ -230,10 +260,18 @@ class VectorStoreManagerApp(tk.Tk):
         self.combo_embedder = ttk.Combobox(self.frame_create_store, values=self.embedder_options, state="readonly")
         self.combo_embedder.current(0)
         self.combo_embedder.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
-        self.btn_create_store = ttk.Button(self.frame_create_store, text="Create Store", command=self.create_store)
-        self.btn_create_store.grid(row=2, column=0, columnspan=2, pady=10)
+        # empty (colonna 1)
+        #Frame per i pulsanti (colonna 2)
+        self.frame_create_buttons = ttk.Frame(self.lf_create_store)
+        self.frame_create_buttons.grid(row=2, column=2, sticky="ns", padx=5, pady=5)
+        # Pulsante "Create Store" (colonna 2)
+        self.btn_create_store = ttk.Button(self.frame_create_buttons, text=" Create New Store(s)", command=self.create_store)
+        self.btn_create_store.pack(fill=tk.X)
+        #self.btn_create_store["state"] = tk.ACTIVE
 
+        # --------------------------
         # --- Tab: Add Documents ---
+        # --------------------------
         self.tab_add = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_add, text="Add Documents")
         add_container = ttk.Frame(self.tab_add)
@@ -259,7 +297,9 @@ class VectorStoreManagerApp(tk.Tk):
         self.text_progress = tk.Text(add_container, wrap=tk.WORD)
         self.text_progress.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
+        # ------------------------
         # --- Tab: Query Store ---
+        # ------------------------
         self.tab_query = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_query, text="Query Store")
         query_container = ttk.Frame(self.tab_query)
@@ -302,7 +342,9 @@ class VectorStoreManagerApp(tk.Tk):
         self.tree_query_results.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         self.tree_query_results.bind("<Double-1>", self.show_result_detail)
 
+        # -----------------------
         # --- Tab: Parameters ---
+        # -----------------------
         self.tab_params = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_params, text="Parameters")
         spacer = tk.Frame(self.tab_params, height=spacer_height)
@@ -326,10 +368,19 @@ class VectorStoreManagerApp(tk.Tk):
         self.load_parameters()
 
     def on_tab_changed(self, event):
+        # Resetta la status bar quando cambia il tab
+        self.set_status("")
         selected_tab = event.widget.select()
         tab_text = event.widget.tab(selected_tab, "text")
         if tab_text == "Store Mngt":
+            self.set_status("Select, view or create a store.","green")
             self.refresh_store_list()
+        elif tab_text == "Add Documents":
+            self.set_status("Add documents to the store, one by one or in massive way (all docs in a folder).","green")
+        elif tab_text == "Query Store":
+            self.set_status("Retrieve relevant documents (or chunks) added to the current store entering a query.","green")
+        elif tab_text == "Parameters":
+            self.set_status("View and modify system and retrival parameters. Parameter deletion could damage the system.","green")
 
     def on_strategy_change(self, event):
         selected_strat = self.combo_strategy.get().split(" - ")[0].lower()
@@ -386,8 +437,8 @@ class VectorStoreManagerApp(tk.Tk):
             self.on_strategy_change(None)
             self.set_status("Store loaded.")
         except Exception as e:
-            messagebox.showerror("Error", str(e))
-            self.set_status("Error loading store.")
+            #messagebox.showerror("Error", str(e))
+            self.set_status(f"Error loading store:{str(e)}","red")
 
     def refresh_store_list(self):
         self.store_listbox.delete(0, tk.END)
@@ -402,7 +453,7 @@ class VectorStoreManagerApp(tk.Tk):
     def load_selected_store(self):
         selection = self.store_listbox.curselection()
         if not selection:
-            self.set_status("Load a Store first!")
+            self.set_status("Load a Store first!","red")
             return
         line = self.store_listbox.get(selection[0])
         store_name = line.split(" - ")[0]
@@ -427,13 +478,13 @@ class VectorStoreManagerApp(tk.Tk):
                     self.UIConfig.save()
                 self.refresh_store_list()
             except Exception as e:
-                messagebox.showerror("Error", str(e))
-                self.set_status("Error during store deletion.")
+                #messagebox.showerror("Error", str(e))
+                self.set_status(f"Error during store deletion: {str(e)}","red")
 
     def create_store(self):
         store_name = self.entry_store_name.get().strip()
         if not store_name:
-            self.set_status("Store name cannot be empty.")
+            self.set_status("Store name cannot be empty.","red")
             return
         embedder_key = self.combo_embedder.get()
         temp_embedding_manager = EmbeddingManager(model_key=embedder_key, chunk_size=50, overlap=10)
@@ -441,12 +492,12 @@ class VectorStoreManagerApp(tk.Tk):
         print(f"[DEBUG] Dummy text length: {len(dummy_text.split())} words")
         chunks, dummy_embeddings = temp_embedding_manager.embed_text(dummy_text)
         if dummy_embeddings is None or dummy_embeddings.shape[0] == 0:
-            self.set_status("Error generating dummy embedding.")
+            self.set_status("Error generating dummy embedding.","red")
             return
         embedding_dim = len(dummy_embeddings[0])
         print(f"[DEBUG] embedding_dim = {embedding_dim}")
         if embedding_dim == 0:
-            self.set_status("Error: embedding dimension is 0.")
+            self.set_status("Error: embedding dimension is 0.","red")
             return
         try:
             self.vector_storage_manager.create_storage(store_name, embedding_dim,
@@ -460,20 +511,14 @@ class VectorStoreManagerApp(tk.Tk):
             self.set_status(f"Index saved. Store {store_name} successfully created using {embedder_key} embedder.")
         except Exception as e:
             traceback.print_exc()
-            self.set_status("Error during store creation.")
+            self.set_status("Error during store creation.","red")
 
     def on_store_info_select(self, event):
-        print("DEBUG: on_store_info_select triggered!")  # Per verificare la chiamata
         selection = self.store_info_list.curselection()
-        print("DEBUG: selection:", selection)
         if not selection:
             self.btn_delete_doc["state"] = tk.DISABLED
             return
-
         line = self.store_info_list.get(selection[0]).strip()
-        print("DEBUG: selected line:", line)  # Usa line, non lin
-
-        import re
         pattern = r"^- ([0-9a-fA-F-]+): (.+)$"
         if re.match(pattern, line):
             self.btn_delete_doc["state"] = tk.NORMAL
@@ -483,14 +528,13 @@ class VectorStoreManagerApp(tk.Tk):
     def delete_document(self):
         selection = self.store_info_list.curselection()
         if not selection:
-            self.set_status("No document selected for deletion.")
+            self.set_status("No document selected for deletion.","red")
             return
         line = self.store_info_list.get(selection[0]).strip()
-        import re
         pattern = r"^- ([0-9a-f-]+): (.+)$"
         match = re.match(pattern, line)
         if not match:
-            self.set_status("Invalid document selection.")
+            self.set_status("Invalid document selection.","red")
             return
         doc_id = match.group(1)
         confirm = messagebox.askyesno("Confirm", f"Are you sure you want to delete document '{doc_id}'?")
@@ -508,10 +552,10 @@ class VectorStoreManagerApp(tk.Tk):
                 self.set_status("Document deletion completed.")
                 self.load_store_by_name(self.current_store)
             else:
-                self.set_status("Document not found.")
+                self.set_status("Document not found.","red")
         except Exception as e:
             traceback.print_exc()
-            self.set_status("Error during document deletion.")
+            self.set_status("Error during document deletion.","red")
 
     def browse_directory_or_file(self):
         if self.add_mode_var.get() == "single":
@@ -524,19 +568,17 @@ class VectorStoreManagerApp(tk.Tk):
 
     def add_documents_async(self):
         if not self.current_store:
-            self.set_status("Load a Store first!")
+            self.set_status("Load a Store first!","red")
             return
         path_input = self.add_path_entry.get().strip()
         if not path_input or not os.path.exists(path_input):
-            self.set_status("Invalid file or directory selected.")
+            self.set_status("Invalid file or directory selected.","red")
             return
         self.text_progress.delete("1.0", tk.END)
-        import threading
         t = threading.Thread(target=self._add_documents_worker, args=(path_input,))
         t.start()
 
     def _add_documents_worker(self, path_input):
-        import time
         start_time = time.time()
         storage = self.vector_storage_manager.get_storage(self.current_store)
         if storage is None:
@@ -555,14 +597,13 @@ class VectorStoreManagerApp(tk.Tk):
                     chunk_size=self.embedding_manager.chunk_size,
                     overlap=self.embedding_manager.overlap
                 )
-        import os
         files_to_process = []
         if self.add_mode_var.get() == "single":
             if os.path.isfile(path_input):
                 files_to_process = [path_input]
             else:
                 self._append_progress("ERROR: Selected path is not a file.\n")
-                self.set_status("Invalid file selected.")
+                self.set_status("Invalid file selected.","red")
                 return
         else:
             if os.path.isdir(path_input):
@@ -578,7 +619,7 @@ class VectorStoreManagerApp(tk.Tk):
                         return
             else:
                 self._append_progress("ERROR: Selected path is not a directory.\n")
-                self.set_status("Invalid directory selected.")
+                self.set_status("Invalid directory selected.","red")
                 return
 
         total_files = len(files_to_process)
@@ -605,7 +646,6 @@ class VectorStoreManagerApp(tk.Tk):
                     total_duplicates += 1
                     self._append_progress("  Skipped. Document duplicated (same MD5).\n")
                     continue
-                import uuid
                 doc_id = str(uuid.uuid4())
                 source_file = os.path.basename(file_path)
                 chunks, embeddings = self.embedding_manager.embed_text(content)
@@ -653,7 +693,7 @@ class VectorStoreManagerApp(tk.Tk):
 
     def query_store(self):
         if not self.current_store:
-            self.set_status("Load a Store first!")
+            self.set_status("Load a Store first!","red")
             return
         query_text = self.entry_query.get().strip()
         if not query_text:
@@ -663,8 +703,6 @@ class VectorStoreManagerApp(tk.Tk):
         self.set_status("Query executing...")
         selected_mode = self.retrieval_mode_var.get()
         selected_strategy = self.combo_strategy.get().split(" - ")[0]
-
-        import threading
         t = threading.Thread(target=self.run_query, args=(query_text, selected_mode, selected_strategy))
         t.start()
 
@@ -722,7 +760,7 @@ class VectorStoreManagerApp(tk.Tk):
             self.set_status("Query executed.")
         except Exception as e:
             traceback.print_exc()
-            self.set_status("Error during query execution.")
+            self.set_status("Error during query execution.","red")
 
     def show_result_detail(self, event):
         selected = self.tree_query_results.selection()
@@ -762,7 +800,8 @@ class VectorStoreManagerApp(tk.Tk):
         if not key:
             return
         if key in self.UIConfig.params:
-            messagebox.showerror("Error", f"Key '{key}' already exists.")
+            #messagebox.showerror("Error", f"Key '{key}' already exists.")
+            self.set_status(f"Error: Key '{key}' already exists.","red")
             return
         value = simpledialog.askstring("New Parameter", f"Enter value for {key}:")
         if value is None:
@@ -780,7 +819,8 @@ class VectorStoreManagerApp(tk.Tk):
     def delete_parameter(self):
         selected = self.tree_params.selection()
         if not selected:
-            messagebox.showerror("Error", "No parameter selected.")
+            self.set_status(f"Error: No parameter selected.","red")
+            #messagebox.showerror("Error", "No parameter selected.")
             return
         key = selected[0]
         confirm = messagebox.askyesno("Delete", f"Are you sure you want to delete the parameter '{key}'?")
@@ -815,7 +855,8 @@ class VectorStoreManagerApp(tk.Tk):
 
     def save_parameters(self):
         self.UIConfig.save()
-        messagebox.showinfo("Saved", "Parameters saved to UI_manager.json.")
+        self.set_status(f"Parameters saved to UI_manager.json.")
+        #messagebox.showinfo("Saved", "Parameters saved to UI_manager.json.")
         self.load_parameters()
 
 
