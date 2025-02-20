@@ -115,6 +115,7 @@ your_app_root_directory/
 ├── requiremnts.txt                # Required libraries
 └── config.json                    # Configuration file for UI_manager.py
 </tt>
+<br>
 
 
 Module Details:
