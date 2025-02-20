@@ -151,9 +151,9 @@ first store.
 
 Once installed, the system is not fully functional until a vector store is created.
 To start:<br>
-  5.1 Launch the UI (python UI_manager.py)<br>
-  5.2 Create a vector store<br>
-  5.3 Insert some test documents<br>
+  5.1. Launch the UI (python UI_manager.py)<br>
+  5.2. Create a vector store<br>
+  5.3. Insert some test documents<br>
 
 ![image](https://github.com/user-attachments/assets/cab0c746-2394-4a5d-9979-52ff8ec2d5f8)
 
