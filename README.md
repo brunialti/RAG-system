@@ -136,14 +136,18 @@ Module Details:
 ---
 4) INSTALLATION
 
-4.1. Drop the rag_system directory "as-is" where you want to use it.
-4.2. Install required libraries:
+4.1. Drop the rag_system directory "as-is" where you want to use it.<br>
+4.2. Install required libraries:<br>
+<code>
       pip install -r requirements.txt
-4.3. Create the models directory (if it exists, delete it and run setup_models.py). Ensure
-     setup_models.py is one level above rag_system. Then run:
+</code>
+4.3. Create the models directory (if it exists, delete it and run setup_models.py). Ensure<br>
+     setup_models.py is one level above rag_system. Then run:<br>
+<code>
       python setup_models.py
+</code>
 
-Note: The persistent_stores directory will be created automatically when you create your
+Note: The persistent_stores directory will be created automatically when you create your<br>
 first store.
 
 ---
