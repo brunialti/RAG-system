@@ -137,12 +137,12 @@ Module Details:
 4) INSTALLATION
 
 4.1. Drop the rag_system directory "as-is" where you want to use it.<br>
-4.2. Install required libraries:<br>
+4.2. Install required libraries:
 <code>
       pip install -r requirements.txt
 </code>
 4.3. Create the models directory (if it exists, delete it and run setup_models.py). Ensure<br>
-     setup_models.py is one level above rag_system. Then run:<br>
+     setup_models.py is one level above rag_system. Then run:
 <code>
       python setup_models.py
 </code>
