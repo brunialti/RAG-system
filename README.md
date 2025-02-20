@@ -1,10 +1,10 @@
-RAG SYSTEM - README
-Author: Roberto Brunialti
-Copyright: (c) 2025
+<b>RAGWIZ  - Rag system wizard<br>
+Author: Roberto Brunialti<br>
+Copyright: (c) 2025</b>
 
 WARNING: This code is a Beta release. It may or may not fully meet your needs.
 Use it "as is" at your own risk.
-Consider rag_system as a workbench to better understand RAG systems and to practice with.
+<b>Consider RAGWIZ system as a workbench to better understand RAG systems</b> and to practice with.
 No extensive stress or scalability tests have been performed; nevertheless, it should work 
 effectively with stores up to 500,000 chunks at least. The document ingestion module manages 
 documents of the following types: .txt, .doc (with some limitations), .docx, .pdf.
