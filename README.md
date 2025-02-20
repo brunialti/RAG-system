@@ -151,7 +151,7 @@ first store.
 
 Once installed, the system is not fully functional until a vector store is created.
 To start:<br>
-  5.1. Launch the UI: <code>python UI_manager.py)</code><br>
+  5.1. Launch the UI: <code>python UI_manager.py</code><br>
   5.2. Create a vector store<br>
   5.3. Insert some test documents<br>
 
@@ -163,7 +163,7 @@ To start:<br>
 These operations can also be done via a Python script; see provided samples if available.
 
 ---
-6) REFERENCES
+REFERENCES
 
 Introductory papers:
 1. https://medium.com/@alexrodriguesj/retrieval-augmented-generation-rag-with-langchain-and-faiss-a3997f95b551
