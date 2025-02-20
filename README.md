@@ -155,7 +155,10 @@ To start:
   5.2 Create a vector store
   5.3 Insert some test documents
 
-![image](https://github.com/user-attachments/assets/0a151b3d-3278-4a54-9b53-97ca623aff06)
+![image](https://github.com/user-attachments/assets/cab0c746-2394-4a5d-9979-52ff8ec2d5f8)
+
+![image](https://github.com/user-attachments/assets/145d786f-0aac-4940-86c1-069663167073)
+
 
 These operations can also be done via a Python script; see provided samples if available.
 
