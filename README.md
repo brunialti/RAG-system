@@ -34,10 +34,10 @@ In practice:
   (stored in "metadata.pkl") that aggregates full document text.
 - A persistent TF-IDF index is maintained and saved (in "tfidf.pkl") to support multi-
   representation retrieval.
-- When a query is made, the user can select:
-    • The search strategy ("faiss", "bm25", "ibrido", "multi", or "rrf")
-    • The retrieval mode ("chunk" or "document"). Note that for some strategies (e.g. BM25) 
-      only document-level retrieval is supported.
+- When a query is made, the user can select:<br>
+    • The search strategy ("faiss", "bm25", "ibrido", "multi", or "rrf")<br>
+    • The retrieval mode ("chunk" or "document"). Note that for some strategies (e.g. BM25)<br>
+      only document-level retrieval is supported.<br>
 - Optionally, a cross-encoder (e.g., "cross-encoder/ms-marco-MiniLM-L-6-v2") re-ranks the top-
   k candidates, applying min–max normalization to ensure consistency across signals.
 - An optional knee detection algorithm is available to automatically set a cutoff threshold 
