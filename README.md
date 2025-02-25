@@ -156,7 +156,7 @@ To start:<br>
 
 ![image](https://github.com/user-attachments/assets/cab0c746-2394-4a5d-9979-52ff8ec2d5f8)
 
-![image](https://github.com/user-attachments/assets/922b8a9b-4297-4133-8108-d68d1f545902)
+![image](https://github.com/user-attachments/assets/46ad5a36-7aad-4541-a65e-245163f5bbce)
 
 ![image](https://github.com/user-attachments/assets/d943208d-4d69-4ecd-a041-1214faf13e3e)
 
