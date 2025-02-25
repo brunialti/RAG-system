@@ -1,6 +1,5 @@
 import os
 import sys
-import re
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
 
@@ -80,7 +79,6 @@ def update_config_file(config_path, key, value):
     with open(config_path, "w") as f:
         f.writelines(new_lines)
 
-
 def download_models(models_dir):
     """
     Downloads the required models (embedding models and cross encoder)
@@ -98,11 +96,16 @@ def download_models(models_dir):
         model.save(save_path)
         print(f"Saved embedding model {model_name} to {save_path}")
 
+    # Definisci il nome del modello
     cross_encoder_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     print(f"Downloading cross encoder model: {cross_encoder_model} ...")
     cross_encoder = CrossEncoder(cross_encoder_model)
-    ce_folder = cross_encoder_model.replace("/", "_")
-    ce_save_path = os.path.join(models_dir, ce_folder)
+    ce_save_path = os.path.join(models_dir, *cross_encoder_model.split("/"))
+
+    # Crea la directory (e tutte le sottocartelle) se non esiste
+    os.makedirs(ce_save_path, exist_ok=True)
+
+    # Salva il modello nella directory specificata
     cross_encoder.save(ce_save_path)
     print(f"Saved cross encoder model to {ce_save_path}")
 
@@ -148,6 +151,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
