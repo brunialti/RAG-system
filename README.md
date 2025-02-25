@@ -158,8 +158,6 @@ To start:<br>
 
 ![image](https://github.com/user-attachments/assets/46ad5a36-7aad-4541-a65e-245163f5bbce)
 
-![image](https://github.com/user-attachments/assets/d943208d-4d69-4ecd-a041-1214faf13e3e)
-
 
 These operations can also be done via a Python script; see provided samples if available.
 
