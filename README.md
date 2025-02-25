@@ -98,7 +98,6 @@ your_app_root_directory/
 │   │   ├── cross-encoder/
 │   │   └── cross-encoder_ms-marco-MiniLM-L-6-v2/
 │   ├── __init__.py                # Initializes the rag_system package
-│   ├── bm25_retriever.py          # BM25 retrieval logic
 │   ├── chunker.py                 # Dynamic text chunking functions
 │   ├── README.md                  # This file
 │   ├── config.py                  # Global configuration (config.json)
@@ -110,7 +109,6 @@ your_app_root_directory/
 │   ├── utils.py                   # Helper functions (e.g., MD5 computation)
 │   └── vector_storage.py          # Manages indices (FAISS, BM25, persistent TF-IDF) and metadata
 ├── UI_manager.py                  # Graphical UI for managing the system
-├── UI_manager.json                # UI configuration file
 ├── setup_models.py                # Downloads local models from HuggingFace
 ├── requiremnts.txt                # Required libraries
 └── config.json                    # Configuration file for UI_manager.py
