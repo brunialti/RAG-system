@@ -20,7 +20,8 @@ class EmbeddingManager:
     EMBEDDER_OPTIONS = {
         "MiniLM": "all-MiniLM-L6-v2",
         "MPNet": "all-mpnet-base-v2",
-        "DistilRoBERTa": "all-distilroberta-v1"
+        "DistilRoBERTa": "all-distilroberta-v1",
+        "multilingual-MiniLM-L12-v2":"paraphrase-multilingual-MiniLM-L12-v2"
     }
 
     def __init__(self, model_key="MiniLM", chunk_size=100, overlap=20):
