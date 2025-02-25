@@ -188,3 +188,4 @@ class DocumentManager:
         print("=================")
         print("Note: Document chunking is handled during indexing, not at document load time.")
         return docs
+

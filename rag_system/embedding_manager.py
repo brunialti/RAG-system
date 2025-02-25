@@ -12,6 +12,8 @@ import nltk
 nltk.download("punkt_tab", quiet=True)
 from nltk.tokenize import sent_tokenize
 from sentence_transformers import SentenceTransformer
+import numpy as np
+
 from .chunker import dynamic_chunk_text
 
 class EmbeddingManager:
@@ -23,13 +25,16 @@ class EmbeddingManager:
 
     def __init__(self, model_key="MiniLM", chunk_size=100, overlap=20):
         """
-        :param model_key: chiave del modello (es. "MiniLM", "MPNet", "DistilRoBERTa")
+        :param model_key: chiave del modello (es. "MiniLM", "MPNet", "DistilRoBERTa") oppure il modello completo
         :param chunk_size: lunghezza massima in parole per chunk
         :param overlap: overlap in parole tra chunk consecutivi
         """
-        model_name = self.EMBEDDER_OPTIONS.get(model_key, "all-MiniLM-L6-v2")
-        self.model = SentenceTransformer(model_name)
-        self.model_name = model_name
+        # Se model_key è già uno dei valori usati per caricare il modello, usalo direttamente
+        if model_key in self.EMBEDDER_OPTIONS.values():
+            self.model_name = model_key
+        else:
+            self.model_name = self.EMBEDDER_OPTIONS.get(model_key, "all-MiniLM-L6-v2")
+        self.model = SentenceTransformer(self.model_name)
         self.chunk_size = chunk_size
         self.overlap = overlap
 
@@ -49,12 +54,34 @@ class EmbeddingManager:
                 chunks = [text]
             else:
                 chunks = dynamic_chunk_text(text, chunk_size=self.chunk_size, overlap=self.overlap)
+
+        # Calcolo delle embedding
         embeddings = self.model.encode(chunks)
+
+        # Normalizzazione L2 per interpretare il dot product come coseno di similarità
+        embeddings = np.array(embeddings, dtype="float32")
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        norms[norms == 0] = 1e-9  # per evitare divisione per zero
+        embeddings = embeddings / norms
+
         return chunks, embeddings
 
     def embed_query(self, query: str):
         """
         Ritorna l'embedding (1D) della query.
         """
-        return self.model.encode([query])[0]
+        vec = self.model.encode([query])[0]
+        vec = vec.astype("float32")
+        norm = np.linalg.norm(vec)
+        if norm < 1e-9:
+            norm = 1.0
+        vec /= norm
+        return vec
 
+    def set_chunk_params(self, chunk_size: int, overlap: int):
+        """
+        Consente di modificare a runtime i parametri di chunking.
+        """
+        self.chunk_size = chunk_size
+        self.overlap = overlap
+        print(f"[DEBUG] EmbeddingManager: chunk_size={chunk_size}, overlap={overlap} aggiornati.")
