@@ -158,7 +158,7 @@ To start:<br>
 
 ![image](https://github.com/user-attachments/assets/cab0c746-2394-4a5d-9979-52ff8ec2d5f8)
 
-![image](https://github.com/user-attachments/assets/145d786f-0aac-4940-86c1-069663167073)
+![image](https://github.com/user-attachments/assets/d943208d-4d69-4ecd-a041-1214faf13e3e)
 
 
 These operations can also be done via a Python script; see provided samples if available.
