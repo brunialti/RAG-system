@@ -39,31 +39,47 @@ class EmbeddingManager:
         self.chunk_size = chunk_size
         self.overlap = overlap
 
-    def embed_text(self, text: str):
+    def embed_text(self, text: str, doc_name: str = None):
         """
         Ritorna (chunks, embeddings).
+
         Se il testo è breve (<50 parole), viene restituito un solo chunk.
         Per file Excel (identificati dal marker [EXCEL]), ogni riga viene trattata come un chunk.
+
+        Se viene fornito il parametro doc_name, ogni chunk viene restituito come dizionario con:
+           • "chunk": il testo del chunk
+           • "source": il nome del documento di provenienza
+        In caso contrario, viene mantenuta la vecchia modalità (lista di stringhe).
+
+        :param text: testo da elaborare
+        :param doc_name: (opzionale) nome del documento di provenienza
+        :return: (chunks, embeddings)
         """
+        # Elaborazione per file Excel
         if text.startswith("[EXCEL]"):
-            # Ogni linea (eccetto il marker) corrisponde a un dizionario in formato testo
             lines = text.split("\n")[1:]
-            chunks = [line.strip() for line in lines if line.strip()]
+            chunk_texts = [line.strip() for line in lines if line.strip()]
         else:
             words = text.split()
             if len(words) < 50:
-                chunks = [text]
+                chunk_texts = [text]
             else:
-                chunks = dynamic_chunk_text(text, chunk_size=self.chunk_size, overlap=self.overlap)
+                chunk_texts = dynamic_chunk_text(text, chunk_size=self.chunk_size, overlap=self.overlap)
 
-        # Calcolo delle embedding
-        embeddings = self.model.encode(chunks)
+        # Calcolo delle embedding sui soli testi dei chunk
+        embeddings = self.model.encode(chunk_texts)
 
         # Normalizzazione L2 per interpretare il dot product come coseno di similarità
         embeddings = np.array(embeddings, dtype="float32")
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         norms[norms == 0] = 1e-9  # per evitare divisione per zero
         embeddings = embeddings / norms
+
+        # Se viene fornito il nome del documento, incapsula ciascun chunk in un dizionario
+        if doc_name is not None:
+            chunks = [{"chunk": ct, "source": doc_name} for ct in chunk_texts]
+        else:
+            chunks = chunk_texts
 
         return chunks, embeddings
 
@@ -85,4 +101,5 @@ class EmbeddingManager:
         """
         self.chunk_size = chunk_size
         self.overlap = overlap
-        print(f"[DEBUG] EmbeddingManager: chunk_size={chunk_size}, overlap={overlap} aggiornati.")
+        print(f"[DEBUG] EmbeddingManager: chunk_size={chunk_size}, overlap={overlap}")
+

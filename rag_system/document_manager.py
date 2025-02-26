@@ -75,7 +75,6 @@ def load_document(file_path):
                     raise ValueError("textract ha restituito un contenuto vuoto.")
             except Exception as e:
                 raise ValueError(f"Errore nella lettura del file DOCX ({file_path}): {e}")
-
     elif ext in [".xls", ".xlsx"]:
         try:
             import pandas as pd
@@ -87,35 +86,27 @@ def load_document(file_path):
             raise ValueError(f"Errore nella lettura del file Excel ({file_path}): {e}")
         all_chunks = []
         valid_sheet_found = False
-        rows_per_chunk = 5  # Aggrega 5 righe per chunk
         for sheet_name, df in sheets.items():
-            # Elimina righe e colonne interamente vuote
+            # Elimina righe e colonne completamente vuote
             df = df.dropna(how='all').dropna(axis=1, how='all')
             if df.empty or len(df.columns) == 0:
                 continue
             valid_sheet_found = True
             header = df.columns.tolist()
-            num_rows = len(df)
-            for start in range(0, num_rows, rows_per_chunk):
-                chunk_rows = []
-                for idx in range(start, min(start + rows_per_chunk, num_rows)):
-                    row = df.iloc[idx]
-                    parts = []
-                    for col in header:
-                        norm_value = normalize_value(row[col])
-                        if norm_value:
-                            parts.append(f"{col} è {norm_value}")
-                    if parts:
-                        row_text = f"riga {idx + 2}: " + ", ".join(parts)
-                        chunk_rows.append(row_text)
-                if chunk_rows:
-                    chunk_text = f"Foglio '{sheet_name}', righe {start + 2}-{min(start + rows_per_chunk, num_rows) + 1}: " + " | ".join(
-                        chunk_rows)
-                    all_chunks.append(chunk_text)
+            # Per ogni riga, crea un chunk che include il nome del foglio, il numero di riga e i valori associati alle colonne
+            for idx, row in df.iterrows():
+                parts = []
+                for col in header:
+                    val = row[col]
+                    if pd.notnull(val):
+                        parts.append(f"{col}: {val}")
+                if parts:
+                    # Il numero di riga è incrementato di 2 (perché la prima riga contiene l'header e l'indice parte da 0)
+                    chunk = f"Sheet '{sheet_name}', riga {idx + 2}: " + ", ".join(parts)
+                    all_chunks.append(chunk)
         if not valid_sheet_found:
             raise ValueError("Formato Excel non compatibile: nessun foglio contiene dati validi.")
         return "[EXCEL]\n" + "\n".join(all_chunks)
-
     else:
         raise ValueError(f"Formato {ext} non supportato.")
 
@@ -179,6 +170,7 @@ class DocumentManager:
                         docs[file_path]["metadata"]["type"] = "excel"
                 except Exception as e:
                     print(f"Saltato {file}: {e}")
+
         self.documents.update(docs)
         elapsed = time.time() - start_time
         print("==== Summary ====")
