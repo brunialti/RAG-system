@@ -12,7 +12,8 @@ The document ingestion module manages documents of the following types:
 It can also accept <b>.xls</b> or <b>.xlsx</b> excel files but with some constraints:
 - the data need headers as first row, semantically significant
 - no empty columns on the left before data are allowed, taht is the data need to start from A1 cell
-  
+
+Note the system will index all the sheets, tranforming each row in a text structure embeddable by the system.
 Other document types can be added by modifying document_manager.py, provided that your tools
 can extract plain text from the desired format.
 
