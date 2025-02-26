@@ -15,7 +15,7 @@ It can also accept <b>.xls</b> or <b>.xlsx</b> excel files but with some constra
 
 Note the system will index all the sheets, tranforming each row in a text structure embeddable by the system.<br>
 Other document types can be added by modifying document_manager.py, provided that your tools
-can extract plain text from the desired format.
+can extract plain text from the candidate format.
 
 ---
 1) GENERAL DESCRIPTION
