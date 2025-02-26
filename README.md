@@ -95,8 +95,10 @@ your_app_root_directory/
 │   │   ├── all-distilroberta-v1/
 │   │   ├── all-MiniLM-L6-v2/
 │   │   ├── all-mpnet-base-v2/
-│   │   ├── cross-encoder/
-│   │   └── cross-encoder_ms-marco-MiniLM-L-6-v2/
+│   │   ├── ...
+│   │   └── cross-encoder/
+│   │       ├── cross-encoder_ms-marco-MiniLM-L-6-v2/
+│   │       └── ....
 │   ├── __init__.py                # Initializes the rag_system package
 │   ├── chunker.py                 # Dynamic text chunking functions
 │   ├── README.md                  # This file
@@ -110,8 +112,7 @@ your_app_root_directory/
 │   └── vector_storage.py          # Manages indices (FAISS, BM25, persistent TF-IDF) and metadata
 ├── UI_manager.py                  # Graphical UI for managing the system
 ├── setup_models.py                # Downloads local models from HuggingFace
-├── requiremnts.txt                # Required libraries
-└── config.json                    # Configuration file for UI_manager.py
+└── requiremnts.txt                # Required libraries
 </tt>
 <br>
 
