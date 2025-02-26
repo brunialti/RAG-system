@@ -8,8 +8,8 @@ Use it "as is" at your own risk.
 No extensive stress or scalability tests have been performed; nevertheless, it should work 
 effectively with stores up to many thousand chunks depending on memory size and CPUs.<br>
 The document ingestion module manages documents of the following types: 
-.txt, .doc (with some limitations), .docx, .pdf.
-It can also accept excel files but with some constraints:
+<b>.tx</b>t, <b>.doc</b> (with some limitations), <b>.docx</b>, <b>.pdf</b>.
+It can also accept <b>.xls</b> or <b>.xlsx</b> excel files but with some constraints:
 - the data need headers as first row, semantically significant
 - no empty columns on the left before data are allowed, taht is the data need to start from A1 cell
   
