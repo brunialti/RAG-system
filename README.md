@@ -6,7 +6,7 @@ WARNING: This code is a Beta release. It may or may not fully meet your needs.
 Use it "as is" at your own risk.
 <b>Consider RAGWIZ system as a workbench to better understand RAG systems</b> and to practice with.
 No extensive stress or scalability tests have been performed; nevertheless, it should work 
-effectively with stores up to houdred thousand chunks depending on memory size and CPUs. 
+effectively with stores up to many thousand chunks depending on memory size and CPUs. 
 The document ingestion module manages documents of the following types: 
 .txt, .doc (with some limitations), .docx, .pdf.
 It can also accept excel files but be aware that, at this moment, the search results are quite poor,
