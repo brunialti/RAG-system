@@ -88,6 +88,7 @@ CHECKBOX_INFO_AUTO = (
     "When enabled, the system automatically selects the most appropriate retrieval strategy based on the query token number (parameter UI_QUERY_AUTO_MIN_TOKENS)"
 )
 
+FILENAME = os.path.join(os.path.dirname(__file__), "rag_system", "rag_system.json")
 
 class UIConfig:
     DEFAULTS = {
@@ -102,11 +103,22 @@ class UIConfig:
         "UI_LAST_STORE": "",
         "UI_QUERY_AUTO_MIN_TOKENS": 3
     }
-    FILENAME = "rag_system.json"  # The UI uses the same file rag_system.json
+
+    # Il file di configurazione si trova in: <UI_manager_dir>/rag_system/rag_system.json
+    FILENAME = os.path.join(os.path.dirname(__file__), "rag_system", "rag_system.json")
 
     def __init__(self):
         self.params = dict(self.DEFAULTS)
         self.load()
+        # Calcola la directory del file di configurazione (dove risiede rag_system)
+        config_dir = os.path.dirname(self.FILENAME)
+        # Se BASE_DIR non è un percorso assoluto, lo converto in percorso assoluto relativo a config_dir.
+        # Se il valore parte con "rag_system/", lo rimuovo per evitare duplicazioni.
+        if not os.path.isabs(self.params["BASE_DIR"]):
+            base_dir = self.params["BASE_DIR"]
+            if base_dir.startswith("rag_system/"):
+                base_dir = base_dir[len("rag_system/"):]
+            self.params["BASE_DIR"] = os.path.join(config_dir, base_dir)
 
     def load(self):
         if os.path.exists(self.FILENAME):
@@ -276,13 +288,18 @@ class VectorStoreManagerApp(tk.Tk):
         self.frame_create_store = ttk.Frame(self.lf_create_store)
         self.frame_create_store.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         self.frame_create_store.columnconfigure(1, weight=1)
+
         ttk.Label(self.frame_create_store, text="Store Name:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.entry_store_name = ttk.Entry(self.frame_create_store)
         self.entry_store_name.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
         ttk.Label(self.frame_create_store, text="Select Embedder:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         self.embedder_options = ["MiniLM", "MPNet", "DistilRoBERTa","multilingual-MiniLM-L12-v2"]
         self.combo_embedder = ttk.Combobox(self.frame_create_store, values=self.embedder_options, state="readonly")
-        self.combo_embedder.current(0)
+        current_embedder = self.UIConfig.params["EMBEDDING_MODEL_KEY"]
+        if current_embedder in self.embedder_options:
+            self.combo_embedder.current(self.embedder_options.index(current_embedder))
+        else:
+            self.combo_embedder.current(0)
         self.combo_embedder.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
         self.frame_create_buttons = ttk.Frame(self.frame_create_store)
         self.frame_create_buttons.grid(row=0, column=2, sticky="ns", padx=5, pady=5)
@@ -314,6 +331,9 @@ class VectorStoreManagerApp(tk.Tk):
         self.btn_add_docs = ttk.Button(add_container, text="Add Documents", command=self.add_documents_async)
         self.btn_add_docs.pack(anchor="e", padx=10, pady=5)
         self.text_progress = tk.Text(add_container, wrap=tk.WORD)
+        #self.text_progress.tag_config('info', background="white", foreground="green")
+        self.text_progress.tag_config('warning', background="white", foreground="orange")
+        self.text_progress.tag_config('error', background="white", foreground="red")
         self.text_progress.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
         # TAB: Query Store
@@ -739,10 +759,10 @@ class VectorStoreManagerApp(tk.Tk):
                 try:
                     content = load_document(file_path)
                 except Exception as e:
-                    self._append_progress(f"  ⚠️ Skipped. Cannot read document: {e}\n")
+                    self._append_progress(f"  ⚠️ Skipped. Cannot read document: {e}\n","error")
                     continue
                 if not content:
-                    self._append_progress("  ⚠️ Skipped. Empty or unsupported.\n")
+                    self._append_progress("  ⚠️ Skipped. Empty or unsupported.\n","error")
                     continue
 
                 total_processed_kb += file_size_kb
@@ -751,7 +771,7 @@ class VectorStoreManagerApp(tk.Tk):
                 if signature in storage.signatures:
                     total_docs_skipped += 1
                     total_duplicates += 1
-                    self._append_progress("  ⚠️ Skipped. Document duplicated (same MD5).\n")
+                    self._append_progress("  ⚠️ Skipped. Document duplicated (same MD5).\n","warning")
                     continue
                 doc_id = str(uuid.uuid4())
                 source_file = os.path.basename(file_path)
@@ -776,8 +796,7 @@ class VectorStoreManagerApp(tk.Tk):
                                                  self.embedding_manager)
         self.set_status("Index saved. Documents added, indexes built and saved.")
         elapsed = time.time() - start_time
-        dup_percentage = (total_duplicates / (total_chunks + total_duplicates)) * 100 if (
-                                                                                                     total_chunks + total_duplicates) > 0 else 0.0
+        dup_percentage = (total_duplicates / (total_chunks + total_duplicates)) * 100 if (total_chunks + total_duplicates) > 0 else 0.0
         summary = (
             "\n==== Summary ====\n"
             f"Inserted docs: {total_docs_added}\n"
@@ -792,9 +811,9 @@ class VectorStoreManagerApp(tk.Tk):
         self.after(0, lambda: self.load_store_by_name(self.current_store))
         self.after(0, lambda: self.set_status("Documents added, indexes built and saved."))
 
-    def _append_progress(self, text):
+    def _append_progress(self, text, tag=''):
         def append():
-            self.text_progress.insert(tk.END, text)
+            self.text_progress.insert(tk.END, text,tag)
             self.text_progress.see(tk.END)
 
         self.after(0, append)
