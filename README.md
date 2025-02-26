@@ -9,10 +9,10 @@ No extensive stress or scalability tests have been performed; nevertheless, it s
 effectively with stores up to many thousand chunks depending on memory size and CPUs. 
 The document ingestion module manages documents of the following types: 
 .txt, .doc (with some limitations), .docx, .pdf.
-It can also accept excel files but be aware that, at this moment, the search results are quite poor,
-suggested spreadsheet dimension is small, and there are shape constraints (only tables with headers
-are correctly indexed). A better chunk/embed algo is required.
-Other document types can be added by modifying document_manager.py, provided that your tools 
+It can also accept excel files but with some constraints:
+- the data need headers as first row, semantically significant
+- no empty columns on the left before data are allowed, taht is the data need to start from A1 cell
+Other document types can be added by modifying document_manager.py, provided that your tools
 can extract plain text from the desired format.
 
 ---
