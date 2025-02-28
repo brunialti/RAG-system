@@ -193,8 +193,8 @@ your_app_root_directory/
     <li>Fox, E.A., &amp; Shaw, J.A. (1994). Combination of multiple searches. TREC.</li>
     <li>Cormack, G.V., Clarke, C.L.A., &amp; Buettcher, S. (2009). Reciprocal Rank Fusion.</li>
     <li>FAISS: <a href="https://faiss.ai/">https://faiss.ai/</a></li>
-    <li>Rank-BM25 for BM25.</li>
-    <li>scikit-learn’s TfidfVectorizer for TF-IDF.</li>
+    <li> Manning, Raghavan e Schütze (2008)."An Introduction to Information Retrieval" </li>
+    <li>scikit-learn’s TfidfVectorizer for TF-IDF. https://scikit-learn.org/stable/modules/feature_extraction.html#text-feature-extraction</li>
   </ul>
 
   <hr>
