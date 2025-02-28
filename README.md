@@ -206,7 +206,7 @@ your_app_root_directory/
     <li><strong>vector_storage.py:</strong> Manages persistent storage and retrieval of vectors and metadata for FAISS, BM25, and TF-IDF indices. It handles adding, removing, and rebuilding indices.</li>
     <li><strong>config.py:</strong> Handles loading and saving of configuration settings from the <code>rag_system.json</code> file, and defines default values for various system parameters.</li>
     <li><strong>document_manager.py:</strong> Manages document ingestion, text extraction, normalization, and duplicate detection from various file formats (e.g., txt, pdf, docx, Excel).</li>
-    <li><strong>embedding_manager.py:</strong> Generates dense embeddings using SentenceTransformer models, handles text chunking, and normalizes embeddings for similarity calculations.</li>
+    <li><strong>embedding_manager.py:</strong> Generates dense and sparse embeddings using SentenceTransformer models, handles text chunking, and normalizes embeddings for similarity calculations.</li>
     <li><strong>UI_manager.py:</strong> Provides a graphical user interface built with Tkinter, allowing users to create and manage vector stores, add documents, perform queries, and modify system parameters.</li>
   </ul>
 
