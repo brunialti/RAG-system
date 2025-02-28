@@ -29,7 +29,7 @@
     <li>Long documents are split into coherent chunks using strategies based on sentence boundaries 
       and word counts. The splitting is delegated to the dedicated module <code>chunker.py</code>, while the 
       embedding module (<code>embedding_manager.py</code>) computes dense representations on these chunks.</li>
-    <li>A dense index is built using FAISS (saved as <code>index.faiss</code>), and a BM25 index is built 
+    <li>A dense index is built using FAISS (saved as <code>index.faiss</code>), and a BM25 spare index is built 
       (stored in <code>metadata.pkl</code>) that aggregates full document text.</li>
     <li>A persistent TF-IDF index is maintained and saved (in <code>tfidf.pkl</code>) to support multi-representation retrieval.</li>
     <li>When a query is made, the user can select:
