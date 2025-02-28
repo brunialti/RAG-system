@@ -9,7 +9,9 @@ Riferimenti:
 - SentenceTransformers: https://www.sbert.net/
 """
 import nltk
-nltk.download("punkt_tab", quiet=True)
+#nltk.download("punkt_tab", quiet=True)
+nltk.download("punkt", quiet=True)
+
 from nltk.tokenize import sent_tokenize
 from sentence_transformers import SentenceTransformer
 import numpy as np

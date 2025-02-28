@@ -28,7 +28,10 @@ Riferimenti:
 """
 from typing import List, Dict, Any
 import numpy as np
+from openai import ConflictError
 from sklearn.metrics.pairwise import cosine_similarity
+
+from .config import Config
 
 
 def detect_knee(scores: List[float]) -> float:
@@ -77,11 +80,29 @@ class SearchEngine:
             top_k=10,
             retrieval_mode="chunk",
             threshold=0.0,
-            use_knee_detection: bool = False
+            use_knee_detection: bool = False,
+            use_mmr: bool = False,
+            mmr_lambda: float = 0.5,
+            max_context_bytes: int = None
     ) -> List[Dict[str, Any]]:
+        """
+        Esegue la ricerca applicando la strategia richiesta e, opzionalmente, il re-ranking tramite Knee Detection e MMR.
+
+        :param query: La query di ricerca.
+        :param strategy: La strategia di ricerca ("faiss", "bm25", "ibrido", "multi", "rrf").
+        :param top_k: Numero massimo di risultati da restituire.
+        :param retrieval_mode: Modalità di recupero ("chunk" o "document").
+        :param threshold: Soglia minima per considerare un risultato.
+        :param use_knee_detection: Se True, applica la knee detection sui punteggi.
+        :param use_mmr: Se True, applica il re-ranking tramite MMR.
+        :param mmr_lambda: Valore di bilanciamento per MMR (tra rilevanza e diversità).
+        :param max_context_bytes: Se specificato, limita la somma dei byte dei testi selezionati.
+        :return: Lista di risultati filtrati e riordinati.
+        """
         strategy = strategy.lower().strip()
         retrieval_mode = retrieval_mode.lower().strip()
-        print(f"[DEBUG] search_with_strategy called with strategy={strategy}, top_k={top_k}, retrieval_mode={retrieval_mode}, threshold={threshold}")
+        print(
+            f"[DEBUG] search_with_strategy called with strategy={strategy}, top_k={top_k}, retrieval_mode={retrieval_mode}, threshold={threshold}")
 
         if strategy == "faiss":
             results = self.search_faiss(query, top_k, retrieval_mode)
@@ -106,6 +127,11 @@ class SearchEngine:
             results = [r for r in results if r.get("ce_score", r.get("score", 0.0)) > cutoff]
 
         filtered = [r for r in results if r.get("ce_score", r.get("score", 0.0)) >= threshold]
+
+        if use_mmr and filtered:
+            filtered = self.mmr_selection(query, filtered, self.embedding_manager,
+                                          lambda_param=mmr_lambda, top_k=top_k, max_context_bytes=max_context_bytes)
+
         return filtered
 
     # ------------------- FAISS -------------------
@@ -367,6 +393,77 @@ class SearchEngine:
         results.sort(key=lambda x: x["ce_score"], reverse=True)
         return results
 
+    def mmr_selection(self, query: str, results: List[Dict[str, Any]], embedding_manager,
+                      lambda_param: float = 0.5, top_k: int = None, max_context_bytes: int = None) -> List[
+        Dict[str, Any]]:
+        """
+        Applica il riordinamento tramite Maximal Marginal Relevance (MMR) sui risultati ottenuti.
 
+        :param query: La query di ricerca originale.
+        :param results: Lista di risultati (dizionari), ciascuno contenente almeno il campo "chunk" o "text".
+        :param embedding_manager: Istanza di EmbeddingManager per ottenere le embedding.
+        :param lambda_param: Parametro di bilanciamento tra rilevanza e diversità (default 0.5).
+        :param top_k: Numero massimo di risultati da selezionare (default: tutti i risultati).
+        :param max_context_bytes: Se specificato, limita la somma in byte dei testi selezionati.
+        :return: Lista di risultati riordinati secondo MMR.
+        """
+        if not results:
+            return results
 
+        top_k = top_k if top_k is not None else len(results)
+        # Estrai il testo da ciascun risultato, preferendo il campo "chunk" e in fallback "text"
+        candidate_texts = [r.get("chunk", r.get("text", "")) for r in results]
+
+        # Calcola le embedding dei testi candidati usando il modello dell'EmbeddingManager
+        candidate_embeddings = embedding_manager.model.encode(candidate_texts)
+        candidate_embeddings = np.array(candidate_embeddings, dtype="float32")
+        # Normalizza le embedding per il calcolo della similarità coseno
+        norms = np.linalg.norm(candidate_embeddings, axis=1, keepdims=True)
+        norms[norms == 0] = 1e-9
+        candidate_embeddings = candidate_embeddings / norms
+
+        # Calcola l'embedding della query
+        query_vec = embedding_manager.embed_query(query)
+        query_vec = query_vec.reshape(1, -1)
+        query_similarities = cosine_similarity(candidate_embeddings, query_vec).flatten()
+
+        selected_indices = []
+        candidate_indices = list(range(len(results)))
+
+        # Seleziona inizialmente il candidato con la massima similarità con la query
+        first_index = int(np.argmax(query_similarities))
+        selected_indices.append(first_index)
+        candidate_indices.remove(first_index)
+        total_bytes = len(candidate_texts[first_index].encode("utf-8"))
+
+        # Seleziona iterativamente i candidati restanti
+        while candidate_indices and len(selected_indices) < top_k:
+            mmr_scores = []
+            for i in candidate_indices:
+                sim_to_query = query_similarities[i]
+                # Calcola la similarità massima con i candidati già selezionati
+                sim_to_selected = [
+                    cosine_similarity(candidate_embeddings[i].reshape(1, -1),
+                                      candidate_embeddings[j].reshape(1, -1))[0, 0]
+                    for j in selected_indices
+                ]
+                max_sim = max(sim_to_selected) if sim_to_selected else 0.0
+                score = lambda_param * sim_to_query - (1 - lambda_param) * max_sim
+                mmr_scores.append(score)
+            best_idx_relative = int(np.argmax(mmr_scores))
+            best_idx = candidate_indices[best_idx_relative]
+            candidate_text = candidate_texts[best_idx]
+            # Verifica il vincolo sui byte se max_context_bytes è specificato
+            if max_context_bytes is not None:
+                if total_bytes + len(candidate_text.encode("utf-8")) > max_context_bytes:
+                    # Salta questo candidato se l'aggiunta supererebbe il limite
+                    candidate_indices.remove(best_idx)
+                    continue
+                else:
+                    total_bytes += len(candidate_text.encode("utf-8"))
+            selected_indices.append(best_idx)
+            candidate_indices.remove(best_idx)
+
+        mmr_results = [results[i] for i in selected_indices]
+        return mmr_results
 

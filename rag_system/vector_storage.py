@@ -18,9 +18,10 @@ import numpy as np
 import nltk
 nltk.download("punkt", quiet=True)
 from nltk.tokenize import word_tokenize
-from rank_bm25 import BM25Okapi
 
+from rank_bm25 import BM25Okapi
 from sklearn.feature_extraction.text import TfidfVectorizer
+from .config import Config
 from .embedding_manager import EmbeddingManager
 
 def align_embedding_manager(embedding_manager, store):
@@ -165,7 +166,8 @@ class VectorStorage:
             else:
                 self.bm25_corpus.extend(new_tokenized)
                 self.bm25_doc_ids.extend(new_chunks)
-            self.bm25 = BM25Okapi(self.bm25_corpus)
+            #self.bm25 = BM25Okapi(self.bm25_corpus, k1=1.0, b=0.65)
+            self.bm25 = BM25Okapi(self.bm25_corpus, k1=Config.BM25_PARAM_K1, b=Config.BM25_PARAM_B)
             self.bm25_indexed_count = len(self.chunks_data)
 
     def search_bm25(self, query_text, top_k=5):

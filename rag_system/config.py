@@ -8,13 +8,13 @@ CONFIG_FILE = os.path.join(_THIS_DIR, _CONFIG_FILENAME)
 TRANSFORMERS_CACHE = "C:/Users/rober/Dropbox/Applicazioni/shibot/CHATGPT/rag_system/models"
 
 class Config:
+    BASE_DIR = "persistent_stores"
     EMBEDDING_MODEL_KEY = "MiniLM"            # Possibili valori: "MiniLM", "MPNet", "DistilRoBERTa"
     CHUNK_SIZE = 200
     OVERLAP = 100
     CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     DEFAULT_TOP_K = 20
     DEFAULT_THRESHOLD = 0.5
-    BASE_DIR = "persistent_stores"
     MIN_CHUNKS = 3  # Numero minimo di chunk per considerare un file "piccolo"
     DEFAULT_RETRIEVAL_MODE = "chunk"
     UI_LAST_STORE = ""
@@ -34,6 +34,9 @@ class Config:
             cls.UI_LAST_STORE = data.get("UI_LAST_STORE", cls.UI_LAST_STORE)
             cls.DEFAULT_RETRIEVAL_MODE = data.get("DEFAULT_RETRIEVAL_MODE", cls.DEFAULT_RETRIEVAL_MODE)
             cls.MIN_CHUNKS = data.get("MIN_CHUNKS", cls.MIN_CHUNKS)
+            cls.BM25_PARAM_K1 = 1.0
+            cls.BM25_PARAM_B = 0.65
+            cls.MMR_PARAM_LAMBDA = 0.85
         else:
             cls.save()
 
@@ -49,7 +52,10 @@ class Config:
             "DEFAULT_THRESHOLD": cls.DEFAULT_THRESHOLD,
             "UI_LAST_STORE": cls.UI_LAST_STORE,
             "DEFAULT_RETRIEVAL_MODE": cls.DEFAULT_RETRIEVAL_MODE,
-            "MIN_CHUNKS": cls.MIN_CHUNKS
+            "MIN_CHUNKS": cls.MIN_CHUNKS,
+            "BM25_PARAM_K1": cls.BM25_PARAM_K1,
+            "BM25_PARAM_B": cls.BM25_PARAM_B,
+            "MMR_PARAM_LAMBDA": cls.MMR_PARAM_LAMBDA
         }
         with open(CONFIG_FILE, "w") as f:
             json.dump(data, f, indent=4)

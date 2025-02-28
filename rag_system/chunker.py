@@ -11,7 +11,8 @@ Riferimenti:
 """
 
 import nltk
-nltk.download("punkt_tab", quiet=True)
+#nltk.download("punkt_tab", quiet=True)
+nltk.download("punkt", quiet=True)
 from nltk.tokenize import sent_tokenize
 
 def dynamic_chunk_text(text, chunk_size=100, overlap=20, min_chunks=3):
