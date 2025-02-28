@@ -21,7 +21,7 @@
   and a persistent TF-IDF index for multi-representation retrieval. The system is designed to 
   efficiently handle very heterogeneous documents—from very short to very long—and return 
   relevant results for queries, optionally enriched by a cross-encoder re-ranking phase.
-  The system returns raw text chunks that form a “context” for a user-defined LLM 
+  The system returns raw text chunks that could be used as “context” for a user-defined LLM 
   (integration with an LLM is out of scope).</p>
 
   <p><strong>In practice:</strong></p>
