@@ -6,7 +6,7 @@
 
   <hr>
 
-  <p><strong>WARNING:</strong> RAG-system is a python packege implementing a selfcontained RAG system, usable for a variety of purposes: document retrieval, LLM context feeding, ecc... <br>It is quite simple to use/integrate in your own applications. It uses some of the stat-of-the-art algorithms and it is easy to tweak in order to add new ones.<br> A simple but powerfull UI app is also provided, to let you fine tuning the parameters on your real documents store.<br> This code is a Beta release. It may or may not fully meet your needs.
+  <p><strong>WARNING:</strong> RAG-system is a python packege implementing a self-contained RAG system, usable for a variety of purposes: document retrieval, LLM context feeding, ecc... <br>It is quite simple to use/integrate in your own applications. It uses some of the stat-of-the-art algorithms and it is easy to tweak in order to add new ones.<br> A simple but powerfull UI app is also provided, to let you fine tuning the parameters on your real documents store.<br> This code is a Beta release. It may or may not fully meet your needs.
   Use it "as is" at your own risk. Consider <code>rag_system</code> as a workbench to better understand RAG systems and to practice with.
   No extensive stress or scalability tests have been performed; nevertheless, it should work effectively with stores up to 500,000 chunks at least.
   The document ingestion module manages documents of the following types: <code>.txt</code>, <code>.doc</code> (with some limitations), <code>.docx</code>, <code>.pdf</code>.
