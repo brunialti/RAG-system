@@ -37,6 +37,7 @@
         <li>The search strategy ("faiss", "bm25", "ibrido", "multi", or "rrf")</li>
         <li>The retrieval mode ("chunk" or "document"). Note that for some strategies (e.g. BM25) 
           only document-level retrieval is supported.</li>
+        <l>The preferred cross-encoder (ms-marco-MiniLM-L-6-v2, jina-reranker-v2-base-multilingual, minilm-l6-h384-italian-cross-encoder) to refine the rank of the retrieved documents. Other cross-encoders can be easily added to the package.
       </ul>
     </li>
     <li>Optionally, a cross-encoder re-ranks the top candidates, applying min–max normalization 
