@@ -10,7 +10,7 @@
   Use it "as is" at your own risk. Consider <code>rag_system</code> as a workbench to better understand RAG systems and to practice with.
   No extensive stress or scalability tests have been performed; nevertheless, it should work effectively with stores up to many thousands chunks at least.
   The document ingestion module manages documents of the following types: <code>.txt</code>, <code>.doc</code> (with some limitations), <code>.docx</code>, <code>.pdf</code>.
-  It can also process Excel files with some dimensional and format constraints.
+  It can also process Excel files as  <code>.xls</code> and  <code>.xlsx</code>with some dimensional and format constraints.
   Other document types can be added by modifying <code>document_manager.py</code>, provided that your tools can extract plain text from the desired format.</p>
 
   <hr>
