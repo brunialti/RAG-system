@@ -123,15 +123,16 @@ your_app_root_directory/
 │   │       ├── tfidf.pkl          # TF-IDF index
 │   │       └── metadata.pkl       # Metadata index
 │   ├── models/                    # Local models (installed by setup_models.py)
-│   │   ├── all-distilroberta-v1
-│   │   ├── all-MiniLM-L6-v2
-│   │   ├── all-mpnet-base-v2
+│   │   ├── all-distilroberta-v1/
+│   │   ├── all-MiniLM-L6-v2/
+│   │   ├── all-mpnet-base-v2/
+│   │   ├── paraphrase-multilingual-MiniLM-L12-v2/
 │   │   ├── cross-encoder
-│   │   │   └── ms-marco-MiniLM-L-6-v2
+│   │   │   └── ms-marco-MiniLM-L-6-v2/
 │   │   ├── osiria
-│   │   │   └── minilm-l6-h384-italian-cross-encoder
+│   │   │   └── minilm-l6-h384-italian-cross-encoder/
 │   │   └── jinaai
-│   │       └── jina-reranker-v2-base-multilingual
+│   │       └── jina-reranker-v2-base-multilingual/
 │   ├── __init__.py                # Initializes the rag_system package
 │   ├── bm25_retriever.py          # BM25 retrieval logic
 │   ├── chunker.py                 # Dynamic text chunking functions
