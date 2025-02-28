@@ -10,3 +10,5 @@ sentence_transformers
 python-docx
 docx2txt
 rank-bm25
+transformers
+einops

@@ -16,16 +16,18 @@ An optional knee detection cutoff can be enabled.
 Additionally, the Query Store tab now features:
   - a long query input field with a search button to the right.
   - a container labeled "Retrieval Strategy" that contains:
-       • the strategy combobox in column 0, row 0,
-       • the mode radiobuttons ("Chunk" and "Document") side by side in column 0, row 1,
-       • a label in column 1, row 0 (spanning 2 rows) that displays a detailed description of the selected strategy,
-       • an info icon in column 2 (row 0 for "Enable Knee Detection" and row 1 for "Auto select strategy"),
-       • and in column 3, the checkboxes for these functions aligned to the left.
+       • a combobox for strategy selection in column 0, row 0,
+       • a frame containing radiobuttons ("Chunk" and "Document") in column 0, row 1,
+       • a detailed description label in column 1 spanning rows 0–1,
+       • and, newly, in row 2 of the first column, a combobox with the list of cross encoder models.
+         When a cross encoder is selected from this dropdown, it becomes the one used in query functions.
+         The CROSS_ENCODER_MODEL parameter is updated accordingly and saved to the configuration file.
+         Finally, the MMR row is shifted down to row 3.
 
-In the Add Documents tab, the LabelFrame "Select doc(s) to store" contains (from left to right):
+In the Add Documents tab, the LabelFrame "Select doc(s) to store" contains:
   - an input field for the path,
   - a "Browse" button,
-  - and (to the right, arranged vertically) two radiobuttons ("Single Doc" and "All Docs in Folder").
+  - and two radiobuttons ("Single Doc" and "All Docs in Folder").
 """
 
 import rag_system
@@ -83,12 +85,25 @@ CHECKBOX_INFO_KNEE = (
     "When enabled, the system applies a knee detection algorithm to automatically determine a cutoff in the ranking scores, "
     "filtering out lower-quality results."
 )
+
 CHECKBOX_INFO_AUTO = (
     "Auto Select Strategy:\n\n"
-    "When enabled, the system automatically selects the most appropriate retrieval strategy based on the query token number (parameter UI_QUERY_AUTO_MIN_TOKENS)"
+    "When enabled, the system automatically selects the most appropriate retrieval strategy based on the query token number (parameter UI_QUERY_AUTO_MIN_TOKENS)."
 )
 
+CHECKBOX_INFO_MMR = (
+    "Enable MMR:\n\n"
+    "If enabled, the search results will be re-ranked using the Maximal Marginal Relevance (MMR) algorithm, "
+    "which balances relevance with diversity to reduce redundancy.\nThe MMR parameter is MMR_PARAM_LAMBDA. You can set new values in the Parameters tab."
+)
+
+# List of available cross encoder models
+CROSS_ENCODER_OPTIONS = ["cross-encoder/ms-marco-MiniLM-L-6-v2",
+                         "jinaai/jina-reranker-v2-base-multilingual",
+                         "osiria/minilm-l6-h384-italian-cross-encoder"]
+
 FILENAME = os.path.join(os.path.dirname(__file__), "rag_system", "rag_system.json")
+
 
 class UIConfig:
     DEFAULTS = {
@@ -101,19 +116,16 @@ class UIConfig:
         "DEFAULT_THRESHOLD": 0.0,
         "MIN_CHUNKS": 5,
         "UI_LAST_STORE": "",
-        "UI_QUERY_AUTO_MIN_TOKENS": 3
+        "UI_QUERY_AUTO_MIN_TOKENS": 3,
+        "MMR_PARAM_LAMBDA": 0.7  # Example parameter for MMR re-ranking
     }
-
-    # Il file di configurazione si trova in: <UI_manager_dir>/rag_system/rag_system.json
+    # The configuration file is located at: <UI_manager_dir>/rag_system/rag_system.json
     FILENAME = os.path.join(os.path.dirname(__file__), "rag_system", "rag_system.json")
 
     def __init__(self):
         self.params = dict(self.DEFAULTS)
         self.load()
-        # Calcola la directory del file di configurazione (dove risiede rag_system)
         config_dir = os.path.dirname(self.FILENAME)
-        # Se BASE_DIR non è un percorso assoluto, lo converto in percorso assoluto relativo a config_dir.
-        # Se il valore parte con "rag_system/", lo rimuovo per evitare duplicazioni.
         if not os.path.isabs(self.params["BASE_DIR"]):
             base_dir = self.params["BASE_DIR"]
             if base_dir.startswith("rag_system/"):
@@ -155,6 +167,7 @@ class VectorStoreManagerApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.UIConfig = UIConfig()
+        self.use_mmr = tk.BooleanVar(value=False)
 
         self.title("Rag System - Control Center")
         self.geometry("1000x700")
@@ -187,7 +200,7 @@ class VectorStoreManagerApp(tk.Tk):
         )
         self.vector_storage_manager = VectorStorageManager()
         self.doc_manager = DocumentManager()
-        self.cross_encoder = CrossEncoder(self.UIConfig.params["CROSS_ENCODER_MODEL"])
+        self.cross_encoder = CrossEncoder(self.UIConfig.params["CROSS_ENCODER_MODEL"],trust_remote_code=True)
 
         self.add_mode_var = tk.StringVar(value="single")
         self.use_knee = tk.BooleanVar(value=False)
@@ -197,6 +210,7 @@ class VectorStoreManagerApp(tk.Tk):
         self.create_widgets()
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
         self.combo_strategy.bind("<<ComboboxSelected>>", self.on_strategy_change)
+        self.combo_cross_encoder.bind("<<ComboboxSelected>>", self.on_cross_encoder_change)
         self.on_strategy_change(None)
 
         last_store = self.UIConfig.params["UI_LAST_STORE"].strip()
@@ -217,11 +231,12 @@ class VectorStoreManagerApp(tk.Tk):
             self.status_label.config(text=message, foreground="black")
 
     def create_widgets(self):
+        spacer_height = 10
         style = ttk.Style()
         style.configure("TNotebook.Tab", padding=[10, 10])
-        spacer_height = 10
+        style.configure("TCheckbutton", padding=0)
 
-        # TAB: Store Management
+        # --- Tab: Store Management ---
         self.tab_store_mngt = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_store_mngt, text="Store Mngt")
         self.store_container = ttk.Frame(self.tab_store_mngt)
@@ -288,12 +303,11 @@ class VectorStoreManagerApp(tk.Tk):
         self.frame_create_store = ttk.Frame(self.lf_create_store)
         self.frame_create_store.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         self.frame_create_store.columnconfigure(1, weight=1)
-
         ttk.Label(self.frame_create_store, text="Store Name:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.entry_store_name = ttk.Entry(self.frame_create_store)
         self.entry_store_name.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
         ttk.Label(self.frame_create_store, text="Select Embedder:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
-        self.embedder_options = ["MiniLM", "MPNet", "DistilRoBERTa","multilingual-MiniLM-L12-v2"]
+        self.embedder_options = ["MiniLM", "MPNet", "DistilRoBERTa", "multilingual-MiniLM-L12-v2"]
         self.combo_embedder = ttk.Combobox(self.frame_create_store, values=self.embedder_options, state="readonly")
         current_embedder = self.UIConfig.params["EMBEDDING_MODEL_KEY"]
         if current_embedder in self.embedder_options:
@@ -307,7 +321,7 @@ class VectorStoreManagerApp(tk.Tk):
                                            command=self.create_store)
         self.btn_create_store.pack(fill=tk.X)
 
-        # TAB: Add Documents
+        # --- Tab: Add Documents ---
         self.tab_add = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_add, text="Add Documents")
         add_container = ttk.Frame(self.tab_add)
@@ -331,12 +345,12 @@ class VectorStoreManagerApp(tk.Tk):
         self.btn_add_docs = ttk.Button(add_container, text="Add Documents", command=self.add_documents_async)
         self.btn_add_docs.pack(anchor="e", padx=10, pady=5)
         self.text_progress = tk.Text(add_container, wrap=tk.WORD)
-        #self.text_progress.tag_config('info', background="white", foreground="green")
+        self.text_progress.tag_config('info', background="white", foreground="green")
         self.text_progress.tag_config('warning', background="white", foreground="orange")
         self.text_progress.tag_config('error', background="white", foreground="red")
         self.text_progress.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
-        # TAB: Query Store
+        # --- Tab: Query Store ---
         self.tab_query = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_query, text="Query Store")
         query_container = ttk.Frame(self.tab_query)
@@ -349,52 +363,76 @@ class VectorStoreManagerApp(tk.Tk):
         self.btn_query = ttk.Button(self.query_frame, text="Search", command=self.query_store)
         self.btn_query.grid(row=0, column=2, sticky="e", padx=5)
         self.query_frame.columnconfigure(1, weight=1)
+
         self.strategy_container = ttk.Frame(query_container)
         self.strategy_container.pack(fill=tk.X, padx=10, pady=5)
-        self.rf_frame = ttk.LabelFrame(self.strategy_container, text="Retrieval Strategy", padding=(10, 5))
-        self.rf_frame.pack(fill=tk.X, padx=10, pady=5,expand=True)
-        # Set grid with four columns:
-        # Column 0: combobox (row0) and radiobuttons (row1, horizontally arranged)
-        # Column 1: description label (row0, spanning 2 rows and filling horizontally)
-        # Column 2: info icons (one per row)
-        # Column 3: checkboxes (rows 0 and 1)
+        # --- Retrieval Strategy Frame ---
+        self.rf_frame = ttk.LabelFrame(self.strategy_container, text="Retrieval Strategy", padding=(5, 2))
+        self.rf_frame.pack(fill=tk.X, padx=10, pady=0, expand=True)
+        # Configure columns: column 0 for controls, 1 for description, 2 and 3 for info icons and checkboxes
         self.rf_frame.columnconfigure(0, weight=0)
         self.rf_frame.columnconfigure(1, weight=1)
         self.rf_frame.columnconfigure(2, weight=0)
         self.rf_frame.columnconfigure(3, weight=0)
-        # Combobox in column 0, row 0:
+
+        # Row 0: Strategy combobox
         self.combo_strategy = ttk.Combobox(self.rf_frame, values=list(STRATEGY_DESCRIPTIONS.values()), state="readonly",
                                            width=50)
         self.combo_strategy.current(0)
-        self.combo_strategy.grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        # Radiobuttons in column 0, row 1 (horizontally arranged):
+        self.combo_strategy.grid(row=0, column=0, sticky="nw", padx=5, pady=0)
+
+        # Row 1: Mode radiobuttons ("Chunk" and "Document")
         self.mode_frame = ttk.Frame(self.rf_frame)
-        self.mode_frame.grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        self.mode_frame.grid(row=1, column=0, sticky="nw", padx=5, pady=0)
         self.rb_chunk = ttk.Radiobutton(self.mode_frame, text="Chunk", variable=self.retrieval_mode_var, value="chunk")
         self.rb_chunk.pack(side=tk.LEFT, padx=(0, 10))
         self.rb_document = ttk.Radiobutton(self.mode_frame, text="Document", variable=self.retrieval_mode_var,
                                            value="document")
         self.rb_document.pack(side=tk.LEFT)
-        # Description label in column 1, row 0 (spanning 2 rows, fills horizontally):
+
+        # Row 2: Cross Encoder label (in column 0)
+        self.lbl_cross_encoder = ttk.Label(self.rf_frame, text="Cross Encoder")
+        self.lbl_cross_encoder.grid(row=2, column=0, sticky="w", padx=5, pady=(5, 0))
+
+        # Row 3: Cross Encoder combobox (in column 0)
+        self.combo_cross_encoder = ttk.Combobox(self.rf_frame, values=CROSS_ENCODER_OPTIONS, state="readonly", width=50)
+        current_ce = self.UIConfig.params.get("CROSS_ENCODER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+        if current_ce in CROSS_ENCODER_OPTIONS:
+            self.combo_cross_encoder.current(CROSS_ENCODER_OPTIONS.index(current_ce))
+        else:
+            self.combo_cross_encoder.current(0)
+        self.combo_cross_encoder.grid(row=3, column=0, sticky="nw", padx=5, pady=(0, 5))
+        self.combo_cross_encoder.bind("<<ComboboxSelected>>", self.on_cross_encoder_change)
+
+        # Description label in column 1, spanning rows 0-3
         self.lbl_strategy_info = ttk.Label(self.rf_frame, text="", wraplength=1000, anchor="nw", justify="left")
         self.lbl_strategy_info.config(text=STRATEGY_DETAILS['faiss'])
-        self.lbl_strategy_info.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=5, pady=5)
+        self.lbl_strategy_info.grid(row=0, column=1, rowspan=4, sticky="nsew", padx=5, pady=0)
         self.lbl_strategy_info.bind("<Configure>", self.on_resize_strategy_info)
-        # Info icon and checkbox for "Enable Knee Detection" in row 0:
+
+        # Row 0: Info icon and checkbox for "Enable Knee Detection"
         self.info_icon_knee = ttk.Label(self.rf_frame, text=" ⓘ ", cursor="hand2", foreground="blue")
-        self.info_icon_knee.grid(row=0, column=2, sticky="e", padx=5, pady=5)
+        self.info_icon_knee.grid(row=0, column=2, sticky="ne", padx=5, pady=0)
         self.info_icon_knee.bind("<Button-1>",
                                  lambda event: messagebox.showinfo("Enable Knee Detection", CHECKBOX_INFO_KNEE))
         self.chk_knee = ttk.Checkbutton(self.rf_frame, text="Enable Knee Detection", variable=self.use_knee)
-        self.chk_knee.grid(row=0, column=3, sticky="w", padx=5, pady=5)
-        # Info icon and checkbox for "Auto Select Strategy" in row 1:
+        self.chk_knee.grid(row=0, column=3, sticky="nw", padx=5, pady=0)
+
+        # Row 1: Info icon and checkbox for "Auto Select Strategy"
         self.info_icon_auto = ttk.Label(self.rf_frame, text=" ⓘ ", cursor="hand2", foreground="blue")
-        self.info_icon_auto.grid(row=1, column=2, sticky="e", padx=5, pady=5)
+        self.info_icon_auto.grid(row=1, column=2, sticky="ne", padx=5, pady=0)
         self.info_icon_auto.bind("<Button-1>",
                                  lambda event: messagebox.showinfo("Auto Select Strategy", CHECKBOX_INFO_AUTO))
         self.chk_auto_strategy = ttk.Checkbutton(self.rf_frame, text="Auto select strategy",
                                                  variable=self.auto_strategy)
-        self.chk_auto_strategy.grid(row=1, column=3, sticky="w", padx=5, pady=5)
+        self.chk_auto_strategy.grid(row=1, column=3, sticky="nw", padx=5, pady=0)
+
+        # Row 4: Move MMR row down
+        self.info_icon_mmr = ttk.Label(self.rf_frame, text=" ⓘ ", cursor="hand2", foreground="blue")
+        self.info_icon_mmr.grid(row=2, column=2, sticky="ne", padx=5, pady=0)
+        self.info_icon_mmr.bind("<Button-1>", lambda event: messagebox.showinfo("Enable MMR", CHECKBOX_INFO_MMR))
+        self.chk_mmr = ttk.Checkbutton(self.rf_frame, text="Enable MMR", variable=self.use_mmr)
+        self.chk_mmr.grid(row=2, column=3, sticky="nw", padx=5, pady=0)
 
         self.tree_query_results = ttk.Treeview(query_container, columns=("doc_id", "doc_name", "score", "length"),
                                                show="headings")
@@ -409,7 +447,7 @@ class VectorStoreManagerApp(tk.Tk):
         self.tree_query_results.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         self.tree_query_results.bind("<Double-1>", self.show_result_detail)
 
-        # TAB: Parameters
+        # --- Tab: Parameters ---
         self.tab_params = ttk.Frame(self.notebook)
         self.notebook.add(self.tab_params, text="Parameters")
         spacer = tk.Frame(self.tab_params, height=spacer_height)
@@ -433,12 +471,7 @@ class VectorStoreManagerApp(tk.Tk):
         self.load_parameters()
 
     def on_resize_strategy_info(self, event):
-        """
-        Called whenever the label is resized.
-        We dynamically set wraplength to the new width.
-        """
         new_width = event.width
-        # Update the label's wraplength so it matches the label's actual width
         self.lbl_strategy_info.config(wraplength=new_width)
 
     def on_tab_changed(self, event):
@@ -476,6 +509,22 @@ class VectorStoreManagerApp(tk.Tk):
         selected_strat = self.combo_strategy.get().split(" - ")[0].lower()
         desc = STRATEGY_DETAILS.get(selected_strat, "")
         self.lbl_strategy_info.config(text=desc)
+
+    def on_cross_encoder_change(self, event):
+        selected_ce = self.combo_cross_encoder.get()
+        # Aggiorna la configurazione
+        self.UIConfig.params["CROSS_ENCODER_MODEL"] = selected_ce
+        self.UIConfig.save()
+        # Se il modello è il Jina Reranker, passa trust_remote_code=True
+        if selected_ce.startswith("jinaai/"):
+            self.cross_encoder = CrossEncoder(
+                "jinaai/jina-reranker-v2-base-multilingual",
+                automodel_args={"torch_dtype": "auto"},
+                trust_remote_code=True,
+            )
+        else:
+            self.cross_encoder = CrossEncoder(selected_ce)
+        print(f"Cross encoder updated to: {selected_ce}")
 
     def load_store_by_name(self, store_name):
         try:
@@ -759,10 +808,10 @@ class VectorStoreManagerApp(tk.Tk):
                 try:
                     content = load_document(file_path)
                 except Exception as e:
-                    self._append_progress(f"  ⚠️ Skipped. Cannot read document: {e}\n","error")
+                    self._append_progress(f"  ⚠️ Skipped. Cannot read document: {e}\n", "error")
                     continue
                 if not content:
-                    self._append_progress("  ⚠️ Skipped. Empty or unsupported.\n","error")
+                    self._append_progress("  ⚠️ Skipped. Empty or unsupported.\n", "error")
                     continue
 
                 total_processed_kb += file_size_kb
@@ -771,7 +820,7 @@ class VectorStoreManagerApp(tk.Tk):
                 if signature in storage.signatures:
                     total_docs_skipped += 1
                     total_duplicates += 1
-                    self._append_progress("  ⚠️ Skipped. Document duplicated (same MD5).\n","warning")
+                    self._append_progress("  ⚠️ Skipped. Document duplicated (same MD5).\n", "warning")
                     continue
                 doc_id = str(uuid.uuid4())
                 source_file = os.path.basename(file_path)
@@ -782,7 +831,7 @@ class VectorStoreManagerApp(tk.Tk):
                 storage.signatures[signature] = doc_id
                 total_docs_added += 1
                 total_chunks += chunk_count
-                self._append_progress(f"  Inserted doc_id={doc_id}, {chunk_count} chunks.\n")
+                self._append_progress(f"  Inserted doc_id={doc_id}, {chunk_count} chunks.\n", "info")
             except Exception as e:
                 traceback.print_exc()
                 self._append_progress(f"  ERROR: {e}\n")
@@ -796,7 +845,8 @@ class VectorStoreManagerApp(tk.Tk):
                                                  self.embedding_manager)
         self.set_status("Index saved. Documents added, indexes built and saved.")
         elapsed = time.time() - start_time
-        dup_percentage = (total_duplicates / (total_chunks + total_duplicates)) * 100 if (total_chunks + total_duplicates) > 0 else 0.0
+        dup_percentage = (total_duplicates / (total_chunks + total_duplicates)) * 100 if (
+                                                                                                     total_chunks + total_duplicates) > 0 else 0.0
         summary = (
             "\n==== Summary ====\n"
             f"Inserted docs: {total_docs_added}\n"
@@ -813,7 +863,7 @@ class VectorStoreManagerApp(tk.Tk):
 
     def _append_progress(self, text, tag=''):
         def append():
-            self.text_progress.insert(tk.END, text,tag)
+            self.text_progress.insert(tk.END, text, tag)
             self.text_progress.see(tk.END)
 
         self.after(0, append)
@@ -851,9 +901,11 @@ class VectorStoreManagerApp(tk.Tk):
                 query=query_text,
                 strategy=strategy,
                 top_k=self.UIConfig.params["DEFAULT_TOP_K"],
-                retrieval_mode=mode,
+                retrieval_mode=self.retrieval_mode_var.get(),
                 threshold=self.UIConfig.params["DEFAULT_THRESHOLD"],
-                use_knee_detection=self.use_knee.get()
+                use_knee_detection=self.use_knee.get(),
+                use_mmr=self.use_mmr.get(),  # New parameter for MMR
+                mmr_lambda=self.UIConfig.params["MMR_PARAM_LAMBDA"]
             )
             self.query_results_data = results
 
@@ -993,3 +1045,4 @@ if __name__ == "__main__":
         os.makedirs(base_dir)
     app = VectorStoreManagerApp()
     app.mainloop()
+
