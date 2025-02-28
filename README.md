@@ -176,8 +176,7 @@ your_app_root_directory/
   <p>These operations can also be done via a Python script; see provided samples if available.</p>
 
   ![image](https://github.com/user-attachments/assets/cab0c746-2394-4a5d-9979-52ff8ec2d5f8)
-
-![image](https://github.com/user-attachments/assets/46ad5a36-7aad-4541-a65e-245163f5bbce)
+  ![image](https://github.com/user-attachments/assets/f5d49e73-eea5-4261-8ad1-6e5041801b24)
 
   <hr>
 
