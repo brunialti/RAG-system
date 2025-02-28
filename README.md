@@ -34,7 +34,7 @@
     <li>A persistent TF-IDF index is maintained and saved (in <code>tfidf.pkl</code>) to support multi-representation retrieval.</li>
     <li>When a query is made, the user can select:
       <ul>
-        <li>The search strategy ("faiss", "bm25", "ibrido", "multi", or "rrf"). A naive strategy auto-select is also provided.</li>
+        <li>The search strategy ("faiss", "bm25", "ibrido", "multi", or "rrf"). A naive strategy auto-select option is also provided.</li>
         <li>The retrieval mode ("chunk" or "document"). Note that for some strategies (e.g. BM25) 
           only document-level retrieval is supported.</li>
         <li>The preferred cross-encoder (ms-marco-MiniLM-L-6-v2, jina-reranker-v2-base-multilingual, minilm-l6-h384-italian-cross-encoder) to refine the rank of the retrieved documents. Other cross-encoders can be easily added to the package.</li>
